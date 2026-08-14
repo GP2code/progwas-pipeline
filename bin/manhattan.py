@@ -144,8 +144,13 @@ def main():
     
     print(f"   Loaded {len(df)} variants")
     
-    # Clean data
-    df = df.dropna(how="any", axis=0)
+    # Drop rows missing the columns required for this model's plots
+    required_cols = ['#CHROM', 'POS']
+    if args.model in ['glm', 'cph']:
+        required_cols.append('P')
+    elif args.model == 'lmm_gallop':
+        required_cols.extend(['P', 'P_INT'])
+    df = df.dropna(subset=required_cols)
     print(f"   After removing missing values: {len(df)} variants")
     
     # Add chromosome ordering for proper sorting
