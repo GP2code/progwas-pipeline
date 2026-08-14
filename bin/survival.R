@@ -163,7 +163,7 @@ tmp.split <- sapply(SNPs,
 snp_data <- matrix(NA, n_rows-1, n_snps)
 iids <- matrix('', n_rows-1, 1)
 # Adjust stats matrix size based on whether interaction is used
-stats <- matrix(NA, n_snps, if (use_interaction) 8 else 4)
+stats <- matrix(NA, n_snps, 10)
                     
 options(warn=-1)
                     
@@ -188,7 +188,7 @@ print( paste("Base survival model (+SNP + SNP:interaction if specified)", basemo
 
 # ------ Fit CoxPH model ----
 
-test_data <- matrix('', n_snps, 10)
+test_data <- matrix('', n_snps, 11)
 
 for (i in 1:n_snps) {
   parts <- unlist(tmp.split[[i]]) # expecting (chr, pos, ref, alt_a1)
@@ -213,7 +213,8 @@ for (i in 1:n_snps) {
                      alt_freq, 
                      miss_freq, 
                      obs_ct, 
-                     'CoxPH')
+                     'CoxPH',
+                     if (use_interaction) interact_covar else 'NA')
   
   # test SNP
   data.geno$SNP <- alt_counts
@@ -235,8 +236,12 @@ for (i in 1:n_snps) {
       interact_term <- if (interact_term1 %in% rownames(res$coefficients)) interact_term1 else interact_term2
       interact_stats = res$coefficients[interact_term,][mod_cols]
       
-      # Combine: main effect + interaction effect
-      stats[i,] = c(snp_stats, interact_stats)
+      # Combine: main effect + interaction effect + intercept-slope correlation + 2DF joint test
+      V_block <- vcov(mdl)[c('SNP', interact_term), c('SNP', interact_term)]
+      theta_vec <- coef(mdl)[c('SNP', interact_term)]
+      corr_int_val <- V_block[1,2] / sqrt(V_block[1,1] * V_block[2,2])
+      p_2df_val <- as.numeric(pchisq(t(theta_vec) %*% solve(V_block) %*% theta_vec, df=2, lower.tail=FALSE))
+      stats[i,] = c(snp_stats, interact_stats, corr_int_val, p_2df_val)
     } else {
       # Ordinary analysis without interaction
       eq = paste0(basemod, "+", 'SNP')
@@ -255,15 +260,11 @@ for (i in 1:n_snps) {
                     
                     
 stats = as.data.frame(stats)
-if (use_interaction) {
-  colnames(stats) = c('BETA', 'exp(BETA)', 'SE', 'P', 'BETAi', 'exp(BETAi)', 'SEi', 'Pi')
-} else {
-  colnames(stats) = c('BETA', 'exp(BETA)', 'SE', 'P')
-}
+colnames(stats) = c('BETA', 'HR', 'SE', 'P', 'BETA_INT', 'HR_INT', 'SE_INT', 'P_INT', 'CORR_INT', 'P_2DF')
 
 test_data <- as.data.frame(test_data)
 colnames(test_data) = c('#CHROM', 'POS', 'ID', 'REF', 'ALT', 'A1', 
-                        'A1_FREQ', 'MISS_FREQ', 'OBS_CT', 'TEST')
+                        'A1_FREQ', 'MISS_FREQ', 'OBS_CT', 'TEST', 'INTERACTION')
 
 stats = cbind(test_data, stats)
 write.table(stats, file=opt$out, sep="\t", row.names=FALSE, quote=FALSE)

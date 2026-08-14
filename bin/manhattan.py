@@ -38,13 +38,13 @@ def plot_summary_stats(data, cohort, outcome, model):
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         manhattanplot(data=data,
                       title=f"Manhattan Intercept {cohort} {outcome}",
-                      pv="Pi", ax=ax, 
+                      pv="P", ax=ax, 
                       xtick_label_set=xtick)
         plt.savefig(f"{cohort}_{outcome}_manhattan_intercept.{model}.png", dpi=300)
         
         # Intercept QQ plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
-        qqplot(data=data["Pi"],
+        qqplot(data=data["P"],
                marker="o",
                title=f"QQ Intercept {cohort} {outcome}",
                xlabel=r"Expected -log(P)",
@@ -56,13 +56,13 @@ def plot_summary_stats(data, cohort, outcome, model):
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         manhattanplot(data=data,
                       title=f"Manhattan Slope {cohort} {outcome}",
-                      pv="Ps", ax=ax, 
+                      pv="P_INT", ax=ax, 
                       xtick_label_set=xtick)
         plt.savefig(f"{cohort}_{outcome}_manhattan_slope.{model}.png", dpi=300)
         
         # Slope QQ plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
-        qqplot(data=data["Ps"],
+        qqplot(data=data["P_INT"],
                marker="o",
                title=f"QQ Slope {cohort} {outcome}",
                xlabel=r"Expected -log(P)",

@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import scale
 from sklearn.impute import SimpleImputer
-from scipy.stats import norm
+from scipy.stats import norm, chi2
 
 import argparse
 import sys
@@ -124,8 +124,10 @@ def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
       parts = col.split(':')
       if len(parts) >= 4:
         allele_parts = parts[3].split('_')
-        if len(allele_parts) >= 2 and allele_parts[1] != parts[2]:
-          ds[col] = 2 - ds[col]  # counted allele is ALT; recode to REF
+        if len(allele_parts) >= 2:
+          counted = allele_parts[1].split('(')[0]  # strip multiallelic decoration e.g. A(/C)
+          if counted != parts[2]:
+            ds[col] = 2 - ds[col]  # counted allele is ALT; recode to REF
 
   # drop alleles that have no unique values
   ds_drop_idx = ds.apply(lambda x: x.nunique() == 1)
@@ -332,6 +334,8 @@ def do_gallop(mdf, data, ds):
   Theta = np.empty((ns, 2))
   D = np.empty((ns, 2))
   Corr = np.empty((1,ns))
+  p_2df = np.full(ns, np.nan)
+  corr_int = np.full(ns, np.nan)
 
   for i in range(0, ns):
     si = ds[s[i]]
@@ -359,6 +363,9 @@ def do_gallop(mdf, data, ds):
       Vi = np.linalg.inv(V)
       D[i] = np.diag(Vi)
       Corr[0,i] = Vi[0,1]
+      chi2_val = float(np.array(Theta[i]) @ V @ np.array(Theta[i])) / (sig**2)
+      p_2df[i] = chi2.sf(chi2_val, df=2)
+      corr_int[i] = Vi[0,1] / np.sqrt(np.abs(D[i,0]) * np.abs(D[i,1]))
     except np.linalg.LinAlgError as e:
       sys.stderr.write(f"Linear model error fitting {s[i]}\n")
       sys.stderr.write(str(e))
@@ -366,20 +373,20 @@ def do_gallop(mdf, data, ds):
       sys.stderr.flush()
 
   SE = np.multiply(np.sqrt(np.power(sig,2)), np.sqrt(np.abs(D)))
-  COV = np.multiply(np.power(sig,2), Corr)
   Pval = np.multiply(2, norm.cdf(-np.abs(Theta / SE)))
 
   a = pd.DataFrame()
   a['TEST'] = ['ADD_CHANGE'] * ns
-  a['BETAs'] = -Theta[:,1]
-  a['SEs'] = SE[:,1]
-  a['T_STAT'] = -9
-  a['Ps'] = Pval[:,1]
+  a['BETA'] = -Theta[:,0]
+  a['SE'] = SE[:,0]
+  a['P'] = Pval[:,0]
   a['OBS_CT_REP'] = np.squeeze(np.asarray(np.matmul(TTs[:,0], np.matrix(ds.notna()))))
-  a['BETAi'] = -Theta[:,0]
-  a['SEi'] = SE[:,0]
-  a['Pi'] = Pval[:,0]
-  a['COV'] = np.squeeze(COV)
+  a['BETA_INT'] = -Theta[:,1]
+  a['SE_INT'] = SE[:,1]
+  a['P_INT'] = Pval[:,1]
+  a['CORR_INT'] = corr_int
+  a['P_2DF'] = p_2df
+  a['INTERACTION'] = 'TIME'
 
   return a
 
@@ -400,7 +407,9 @@ def do_lme(data, ds, mod_formula=None, covariates=None):
   ns = len(s)
   beta_incpt = np.empty((ns, 4))
   beta_slope = np.empty((ns, 4))
-  
+  p_2df = np.full(ns, np.nan)
+  corr_int = np.full(ns, np.nan)
+
   ids = pd.factorize(data['id'].unique())[0] + 1
 
   # Extract all covariate columns from data (numeric + encoded categorical)
@@ -424,20 +433,30 @@ def do_lme(data, ds, mod_formula=None, covariates=None):
     if mdf is not None:
       beta_incpt[i,:] = np.array([ mdf.params['snp'], mdf.bse['snp'], mdf.tvalues['snp'], mdf.pvalues['snp'] ])
       beta_slope[i,:] = np.array([ mdf.params['sxt'], mdf.bse['sxt'], mdf.tvalues['sxt'], mdf.pvalues['sxt'] ])
+      try:
+        cov_m = mdf.cov_params().loc[['snp', 'sxt'], ['snp', 'sxt']].values
+        theta_vec = np.array([mdf.params['snp'], mdf.params['sxt']])
+        chi2_val = float(theta_vec @ np.linalg.inv(cov_m) @ theta_vec)
+        p_2df[i] = chi2.sf(chi2_val, df=2)
+        corr_int[i] = cov_m[0,1] / np.sqrt(cov_m[0,0] * cov_m[1,1])
+      except Exception:
+        pass
     else:
       beta_incpt[i,:] = np.array([np.NAN, np.NAN, np.NAN, np.NAN])
       beta_slope[i,:] = np.array([np.NAN, np.NAN, np.NAN, np.NAN])
 
   a = pd.DataFrame()
   a['TEST'] = ['ADD_CHANGE'] * ns
-  a['BETAs'] = -beta_slope[:,0]
-  a['SEs'] = beta_slope[:,1]
-  a['T_STAT'] = beta_slope[:,2]
-  a['Ps'] = beta_slope[:,3]
-  a['OBS_CT_REP'] = len(data) # length of the phenotypes includes longitudinal data
-  a['BETAi'] = -beta_incpt[:,0]
-  a['SEi'] = beta_incpt[:,1]
-  a['Pi'] = beta_incpt[:,3]
+  a['BETA'] = -beta_incpt[:,0]
+  a['SE'] = beta_incpt[:,1]
+  a['P'] = beta_incpt[:,3]
+  a['OBS_CT_REP'] = len(data)
+  a['BETA_INT'] = -beta_slope[:,0]
+  a['SE_INT'] = beta_slope[:,1]
+  a['P_INT'] = beta_slope[:,3]
+  a['CORR_INT'] = corr_int
+  a['P_2DF'] = p_2df
+  a['INTERACTION'] = 'TIME'
   return a
 
 

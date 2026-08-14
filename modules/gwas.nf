@@ -90,7 +90,7 @@ process GWASGLM {
                              if(\$i=="P") pcol=i;
                          }
                          # Print base header plus interaction columns
-                         print \$0, "BETAi", "SEi", "Pi", "P_2DF";
+                         print \$0, "BETA_INT", "SE_INT", "P_INT", "P_2DF", "INTERACTION";
                          next;
                      }
                      {
@@ -117,7 +117,7 @@ process GWASGLM {
                              se_i = (id in interact_se) ? interact_se[id] : "NA";
                              p_i = (id in interact_p) ? interact_p[id] : "NA";
                              p_2df = (id in twodf_p) ? twodf_p[id] : "NA";
-                             print add[id], beta_i, se_i, p_i, p_2df;
+                             print add[id], beta_i, se_i, p_i, p_2df, "${params.covar_interact}";
                          }
                      }' "\${glm_file}" > "\${output_file}"
             fi
