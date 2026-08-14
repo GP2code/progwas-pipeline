@@ -247,7 +247,7 @@ for (i in 1:n_snps) {
       eq = paste0(basemod, "+", 'SNP')
       mdl = coxph(as.formula(eq), data=data.mtx)
       res = summary(mdl)
-      stats[i,] = res$coefficients['SNP',][mod_cols]
+      stats[i, 1:4] = res$coefficients['SNP',][mod_cols]
     }
   }, error = function(e) {
     # Log error to stderr and continue with NA values
