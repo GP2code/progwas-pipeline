@@ -118,6 +118,15 @@ def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
   else:
     ds = ds.drop(['IID'], axis=1) # drop ID after filtering
   
+  # Normalise to REF dosage if plink2 exported ALT dosage (detected from column name suffix)
+  if rawfile:
+    for col in list(ds.columns):
+      parts = col.split(':')
+      if len(parts) >= 4:
+        allele_parts = parts[3].split('_')
+        if len(allele_parts) >= 2 and allele_parts[1] != parts[2]:
+          ds[col] = 2 - ds[col]  # counted allele is ALT; recode to REF
+
   # drop alleles that have no unique values
   ds_drop_idx = ds.apply(lambda x: x.nunique() == 1)
   ds = ds.drop(ds.columns[ds_drop_idx], axis=1)
