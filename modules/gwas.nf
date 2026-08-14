@@ -90,7 +90,7 @@ process GWASGLM {
                              if(\$i=="P") pcol=i;
                          }
                          # Print base header plus interaction columns
-                         print \$0, "BETA_INT", "SE_INT", "P_INT", "P_2DF", "INTERACTION";
+                         print \$0, "BETA_INT", "SE_INT", "P_INT", "CORR_INT", "P_2DF", "INTERACTION", "MODEL";
                          next;
                      }
                      {
@@ -117,7 +117,7 @@ process GWASGLM {
                              se_i = (id in interact_se) ? interact_se[id] : "NA";
                              p_i = (id in interact_p) ? interact_p[id] : "NA";
                              p_2df = (id in twodf_p) ? twodf_p[id] : "NA";
-                             print add[id], beta_i, se_i, p_i, p_2df, "${params.covar_interact}";
+                             print add[id], beta_i, se_i, p_i, "NA", p_2df, "${params.covar_interact}", "GLM";
                          }
                      }' "\${glm_file}" > "\${output_file}"
             fi
@@ -147,6 +147,7 @@ process GWASGLM {
         if [ -f "\${result_file}" ]; then
             new_name="\${result_file%.glm.*}.results"
             mv "\${result_file}" "\${new_name}"
+            awk 'BEGIN{OFS="\t"} NR==1{print \$0,"BETA_INT","SE_INT","P_INT","CORR_INT","P_2DF","INTERACTION","MODEL"; next} {print \$0,"NA","NA","NA","NA","NA","NA","GLM"}' "\${new_name}" > "\${new_name}.tmp" && mv "\${new_name}.tmp" "\${new_name}"
 
             # Extract phenotype name from filename
             # Pattern: pop_studyarm_fileTag.phenotype.results

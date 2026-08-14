@@ -376,17 +376,18 @@ def do_gallop(mdf, data, ds):
   Pval = np.multiply(2, norm.cdf(-np.abs(Theta / SE)))
 
   a = pd.DataFrame()
-  a['TEST'] = ['ADD_CHANGE'] * ns
+  a['TEST'] = ['ADD'] * ns
+  a['OBS_CT_REP'] = np.squeeze(np.asarray(np.matmul(TTs[:,0], np.matrix(ds.notna())))).astype(int)
   a['BETA'] = -Theta[:,0]
   a['SE'] = SE[:,0]
   a['P'] = Pval[:,0]
-  a['OBS_CT_REP'] = np.squeeze(np.asarray(np.matmul(TTs[:,0], np.matrix(ds.notna()))))
   a['BETA_INT'] = -Theta[:,1]
   a['SE_INT'] = SE[:,1]
   a['P_INT'] = Pval[:,1]
   a['CORR_INT'] = corr_int
   a['P_2DF'] = p_2df
   a['INTERACTION'] = 'TIME'
+  a['MODEL'] = 'GALLOP'
 
   return a
 
@@ -446,17 +447,18 @@ def do_lme(data, ds, mod_formula=None, covariates=None):
       beta_slope[i,:] = np.array([np.NAN, np.NAN, np.NAN, np.NAN])
 
   a = pd.DataFrame()
-  a['TEST'] = ['ADD_CHANGE'] * ns
+  a['TEST'] = ['ADD'] * ns
+  a['OBS_CT_REP'] = len(data)
   a['BETA'] = -beta_incpt[:,0]
   a['SE'] = beta_incpt[:,1]
   a['P'] = beta_incpt[:,3]
-  a['OBS_CT_REP'] = len(data)
   a['BETA_INT'] = -beta_slope[:,0]
   a['SE_INT'] = beta_slope[:,1]
   a['P_INT'] = beta_slope[:,3]
   a['CORR_INT'] = corr_int
   a['P_2DF'] = p_2df
   a['INTERACTION'] = 'TIME'
+  a['MODEL'] = 'LME'
   return a
 
 
@@ -503,6 +505,10 @@ def format_gwas_output(ds, res, freq):
   col_names = ['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'A1', 'A1_FREQ', 'MISS_FREQ', 'OBS_CT']
   p = p[col_names]
   result = pd.concat([p, res], axis=1)
+  final_cols = ['#CHROM', 'POS', 'ID', 'REF', 'ALT', 'A1', 'A1_FREQ', 'MISS_FREQ', 'OBS_CT',
+                'OBS_CT_REP', 'TEST', 'BETA', 'SE', 'P',
+                'BETA_INT', 'SE_INT', 'P_INT', 'CORR_INT', 'P_2DF', 'INTERACTION', 'MODEL']
+  result = result[[c for c in final_cols if c in result.columns]]
   return result
   
 
@@ -634,7 +640,7 @@ https://www.nature.com/articles/s41598-018-24578-7
       else:
         result = format_other_output(ds, result)
 
-      result.to_csv(out_fn, index=False, sep='\t')
+      result.to_csv(out_fn, index=False, sep='\t', float_format='%.6g')
 
       #if args.refit:
       #  refit_genos = result[(result.P <= args.refit_pval) or (result.Pi <= args.refit_pval)].Transcript.tolist()
@@ -662,7 +668,7 @@ https://www.nature.com/articles/s41598-018-24578-7
       out_fn = f'output.{pheno}.linear_mixed'
       if args.out is not None:
         out_fn = f'{args.out}.{pheno}.linear_mixed'
-      result.to_csv(out_fn, index=False, sep='\t')
+      result.to_csv(out_fn, index=False, sep='\t', float_format='%.6g')
   # if input is PLINK export format -> we can drop the redundant columns
   # TODO
   #   run either LME or GALLOP algorithm

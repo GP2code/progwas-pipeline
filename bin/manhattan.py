@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from qmplot import manhattanplot, qqplot
 
 
-def plot_summary_stats(data, cohort, outcome, model):
+def plot_summary_stats(data, cohort, outcome, model, p_col='P'):
     """Generate Manhattan and QQ plots for GWAS summary statistics.
     
     Args:
@@ -77,13 +77,13 @@ def plot_summary_stats(data, cohort, outcome, model):
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
         manhattanplot(data=data,
                       title=f"Manhattan {model} {cohort} {outcome}",
-                      pv="P", ax=ax,
+                      pv=p_col, ax=ax,
                       xtick_label_set=xtick)
         plt.savefig(f"{cohort}_{outcome}_manhattan.{model}.png", dpi=300)
         
         # QQ plot
         f, ax = plt.subplots(figsize=(15, 7), facecolor="w", edgecolor="k")
-        qqplot(data=data["P"],
+        qqplot(data=data[p_col],
                marker="o",
                title=f"QQ {model} {cohort} {outcome}",
                xlabel=r"Expected -log(P)",
@@ -106,6 +106,8 @@ def main():
     parser.add_argument("--input", required=True, help="Input TSV file with GWAS results")
     parser.add_argument("--model", required=True, choices=["glm", "cph", "lmm_gallop"],
                        help="Analysis model type")
+    parser.add_argument("--p-col", default="P",
+                       help="P-value column for glm/cph plots (default: P)")
     parser.add_argument("--suffix", default="null", help="Cohort suffix (default: null)")
     
     args = parser.parse_args()
@@ -159,8 +161,8 @@ def main():
     df = df.sort_values(by=['chr_order', 'POS'])
     
     # Generate plots
-    print(f"🎨 Generating plots for cohort={cohort_suffix}, phenotype={pheno}, model={args.model}")
-    plot_summary_stats(data=df, cohort=cohort_suffix, outcome=pheno, model=args.model)
+    print(f"🎨 Generating plots for cohort={cohort_suffix}, phenotype={pheno}, model={args.model}, p_col={args.p_col}")
+    plot_summary_stats(data=df, cohort=cohort_suffix, outcome=pheno, model=args.model, p_col=args.p_col)
 
 
 if __name__ == "__main__":
