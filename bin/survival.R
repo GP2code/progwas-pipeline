@@ -176,11 +176,12 @@ for (i in 2:n_rows) {
 rm(input.genodata)
 gc()
       
-# initialize geno dataframe for model
-data.geno <- data.frame(
-  cbind(iids, snp_data[,1]))
-colnames(data.geno) <- c('IID', 'SNP')
-                    
+# merge once to get the shared sample set and row order
+data.geno.ids <- data.frame(IID = as.character(iids))
+data.mtx <- merge(data.merged, data.geno.ids, by='IID')
+iid_to_row <- match(data.mtx$IID, as.character(iids))  # maps data.mtx rows -> snp_data rows
+data.mtx$SNP <- NA_real_
+
 basemod <- paste0("Surv(tstart,tend,", opt[['pheno-name']], ")~")
 basemod <- paste0(basemod, paste(valid.covariates, collapse="+"))
 mod_cols = c('coef', 'se(coef)', 'Pr(>|z|)')
@@ -215,10 +216,9 @@ for (i in 1:n_snps) {
                      obs_ct, 
                      'ADD')
   
-  # test SNP
-  data.geno$SNP <- alt_counts
-  data.mtx = merge( data.merged, data.geno, by='IID' )
-  
+  # update SNP column in the pre-merged data.mtx (no re-merge needed)
+  data.mtx$SNP <- alt_counts[iid_to_row]
+
   tryCatch({
     if (use_interaction) {
       # Test SNP with interaction term
