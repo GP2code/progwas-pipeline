@@ -59,6 +59,7 @@ parser.add_argument('--ref', type=str, default='nope', help='Genotype: (string f
 parser.add_argument('--ref_labels', type=str, default='nope', help='tab-separated plink-style IDs with ancestry label (FID  IID label) with no header')
 parser.add_argument('--pop', type=str, default='nope', help='Population for analysis. right now, supports EUR and SAS')
 parser.add_argument('--out', type=str, default='nope', help='Prefix for output (including path)')
+parser.add_argument('--mind', type=float, default=0.05, help='Sample call rate (missingness) threshold for callrate_prune step [default: 0.05].')
 
 args = parser.parse_args()
 
@@ -67,6 +68,7 @@ ref_path = args.ref
 ref_labels = args.ref_labels
 out_path = args.out
 pop = args.pop
+mind = args.mind
 
 # make names for each step
 callrate_out = f'{geno_path}_callrate'
@@ -76,7 +78,7 @@ king_out = f'{ancestry_out}_king'
 
 
 # run steps
-callrate = callrate_prune(geno_path, callrate_out, mind=0.05)
+callrate = callrate_prune(geno_path, callrate_out, mind=mind)
 
 het = het_prune(callrate_out, het_out)
 make_bed_cmd = f'plink2 --pfile {het_out} --make-bed --out {het_out}'

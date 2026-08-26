@@ -2,23 +2,25 @@
 
 # Simplified QC pipeline for ancestry-specific data (skip population splitting mode)
 # Performs: callrate filter, heterozygosity filter, kinship filter, PCA
-# Usage: simple_qc.sh <input_prefix> <kinship_cutoff> <output_prefix> [threads]
+# Usage: simple_qc.sh <input_prefix> <kinship_cutoff> <output_prefix> [threads] [mind]
 
 GENO=$1
 KINSHIP_CUTOFF=$2
 OUT=$3
 THREADS=${4:-4}  # Default to 4 threads if not specified
+MIND=${5:-0.05}  # Sample call rate threshold (default 0.05 if not provided)
 
 echo "=== Simplified QC Pipeline (skip population splitting) ==="
 echo "Input: ${GENO}"
 echo "Kinship cutoff: ${KINSHIP_CUTOFF}"
 echo "Output: ${OUT}"
 echo "Threads: ${THREADS}"
+echo "Mind threshold: ${MIND}"
 
-# Step 1: Callrate filtering (mind=0.05)
+# Step 1: Callrate filtering
 echo "Step 1: Callrate filtering..."
 plink2 --pfile ${GENO} \
-       --mind 0.05 dosage \
+       --mind ${MIND} dosage \
        --make-pgen \
        --threads ${THREADS} \
        --out ${GENO}_callrate

@@ -178,7 +178,8 @@ process GENETICQC {
     ${fChunk} \
     ${params.r2thres} \
     ${params.assembly} \
-    ${prefix}
+    ${prefix} \
+    ${params.geno}
   
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
@@ -270,7 +271,8 @@ process GENETICQCPLINK {
     ${fileTag} \
     ${params.assembly} \
     ${outputPrefix} \
-    ${params.r2thres}
+    ${params.r2thres} \
+    ${params.geno}
   
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
@@ -501,7 +503,8 @@ process SIMPLE_QC {
       "allchr_merged" \
       "${params.kinship}" \
       "${params.ancestry}_samplelist_p2out" \
-      ${task.cpus}
+      ${task.cpus} \
+      ${params.mind}
     """
 }
 
@@ -525,6 +528,7 @@ process GWASQC {
       --ref "/srv/GWAS-Pipeline/References/ref_panel/1kg_ashkj_ref_panel_gp2_pruned_hg38_newids" \
       --ref_labels "/srv/GWAS-Pipeline/References/ref_panel/ancestry_ref_labels.txt" \
       --pop "${params.ancestry}" \
-      --out "${params.ancestry}_samplelist_p2out"    
+      --out "${params.ancestry}_samplelist_p2out" \
+      --mind "${params.mind}"
     """
 }
