@@ -26,6 +26,7 @@ chunk_size: 30000
 r2thres: -9  # Disable imputation quality filter for test data
 minor_allele_freq: "0.05"
 minor_allele_ct: "20"
+hwe: "1e-6"
 kinship: "0.177"
 
 # Genetic parameters

@@ -168,6 +168,8 @@ For all the paramaters, see [conf/params.config](conf/params.config).
 
 [./conf/examples/](./conf/examples/) has example parameter YAML files for different analytical modes using the example dataset.
 
+**Note on Hardy-Weinberg Equilibrium (HWE) filtering:** `hwe` (default `1e-6`) sets the HWE p-value threshold used when filtering variants during data preparation (`RAWFILE_EXPORT` in `modules/dataprep.nf`) and GWAS execution (`GWASGLM` in `modules/gwas.nf`). It is overridable via `-params-file` or `--hwe` on the CLI. It does not affect the chromosome-level genetic QC stage or the ancestry/kinship pruning step, which apply their own fixed HWE threshold (p < 0.0001) internally as part of KING-robust kinship estimation.
+
 
 #### Profile configurations
 The pipeline has pre-defined profiles for different execution environments. You can specify the profile using the `-profile` flag. Available profiles include:

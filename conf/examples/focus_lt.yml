@@ -38,6 +38,7 @@ publish_gwas_results  : true # Need to be true
 # ==================== GWAS OPTIONS ====================
 minor_allele_freq: 0.01
 minor_allele_ct: 10
+hwe: 1e-6
 no_chunk_export: true  # Export all variants in one pass; no chunking needed for small focus variant sets
 
 

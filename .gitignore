@@ -1,6 +1,8 @@
 # add DS_store
 .DS_Store
 
+FINAL_CLAUDE_README.md
+
 # vim swp files
 *.swp
 *.swo
