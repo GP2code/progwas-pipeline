@@ -170,7 +170,7 @@ For all the paramaters, see [conf/params.config](conf/params.config).
 
 **Note on Hardy-Weinberg Equilibrium (HWE) filtering:** `hwe` (default `1e-6`) sets the HWE p-value threshold used when filtering variants during data preparation (`RAWFILE_EXPORT` in `modules/dataprep.nf`) and GWAS execution (`GWASGLM` in `modules/gwas.nf`). It is overridable via `-params-file` or `--hwe` on the CLI. It does not affect the chromosome-level genetic QC stage or the ancestry/kinship pruning step, which apply their own fixed HWE threshold (p < 0.0001) internally as part of KING-robust kinship estimation.
 
-**Note on genotype/sample missingness filtering (`geno`, `mind`):** `geno` (default `0.1`) sets the variant missingness threshold applied during chromosome-level genetic QC (`GENETICQC`/`GENETICQCPLINK` in `modules/qc.nf`, via `bin/process1.sh`/`bin/process_plink.sh`). `mind` (default `0.05`) sets the sample call-rate (missingness) threshold applied during sample-level QC (`SIMPLE_QC` via `bin/simple_qc.sh` when `skip_pop_split: true`, or `GWASQC` via `bin/addi_qc_pipeline.py` when `skip_pop_split: false`). Both are overridable via `-params-file` or `--geno`/`--mind` on the CLI. Neither affects `run_focus.nf` runs, since that workflow never invokes `modules/qc.nf`. **Caching caveat:** unlike `mind`, `geno` is not part of `genetic_cache_key` (same as `r2thres`) — since `GENETICQC`/`GENETICQCPLINK` outputs are cached via `storeDir` keyed on `genetic_cache_key`, changing `--geno` alone while reusing an existing `genetic_data_id` will silently skip reprocessing and reuse chromosome outputs built with the old `geno` value.
+**Note on genotype/sample missingness filtering (`geno`, `mind`):** `geno` (default `0.1`) sets the variant missingness threshold applied during chromosome-level genetic QC (`GENETICQC`/`GENETICQCPLINK` in `modules/qc.nf`, via `bin/process1.sh`/`bin/process_plink.sh`). `mind` (default `0.05`) sets the sample call-rate (missingness) threshold applied during sample-level QC (`SIMPLE_QC` via `bin/simple_qc.sh` when `skip_pop_split: true`, or `GWASQC` via `bin/addi_qc_pipeline.py` when `skip_pop_split: false`). Both are overridable via `-params-file` or `--geno`/`--mind` on the CLI. Neither affects `run_focus.nf` runs, since that workflow never invokes `modules/qc.nf`. **Caching caveat:** unlike `mind`, `geno` is not part of `genetic_cache_key` — since `GENETICQC`/`GENETICQCPLINK` outputs are cached via `storeDir` keyed on `genetic_cache_key`, changing `--geno` alone while reusing an existing `genetic_data_id` will silently skip reprocessing and reuse chromosome outputs built with the old `geno` value. (`r2thres` *is* included in `genetic_cache_key` — see "Parameter defined key components" below — since it's the primary variant-level filter for imputed input and materially changes the retained variant set; `geno`/`mind` remain excluded pending validation of whether they have any effect on imputed data at all.)
 
 
 #### Profile configurations
@@ -195,7 +195,7 @@ After running the pipeline, the output directory structure under `STORE_ROOT/PRO
 $STORE_ROOT/
 └── $PROJECT_NAME/
     ├── genotypes/
-    │   └── ${genetic_cache_key}/        # e.g., vcf_EUR_hg38_maf0.05_kin0.177_skip
+    │   └── ${genetic_cache_key}/        # e.g., vcf_EUR_hg38_r20.8_maf0.05_kin0.177_skip
     │       └── chromosomes/             # Reused across all analyses with same genetic parameters
     │           ├── chr1.pgen/pvar/psam  # Chromosome-level variant QCed / standardized PLINK2 binaries
     │           ├── chr2.pgen/pvar/psam
@@ -228,11 +228,12 @@ In short: check `gwas_results` first for analysis results; use `results` when tr
 - `PROJECT_NAME`: Unique identifier for your project (default: `unnamed_project`)
 
 **Parameter defined key components:**
-- `genetic_cache_key` = `${format}_${ancestry}_${assembly}_maf${MAF}_kin${kinship}_${skip_suffix}`
-  - Example: `vcf_EUR_hg38_maf0.05_kin0.177_skip`
+- `genetic_cache_key` = `${format}_${ancestry}_${assembly}_r2${r2thres}_maf${MAF}_kin${kinship}_${skip_suffix}`
+  - Example: `vcf_EUR_hg38_r20.8_maf0.05_kin0.177_skip`
     - `format`: vcf, pgen, or bed (input file type)
     - `ancestry`: e.g., EUR, AFR, ALL (as specified in params)
     - `assembly`: hg19 or hg38
+    - `r2thres`: Imputation R² quality threshold (e.g., 0.8, or -9 if disabled)
     - `MAF`: Minor allele frequency threshold (e.g., 0.01, 0.05)
     - `kinship`: Kinship threshold used for sample QC (e.g., 0.0884, 0.177)
     - `skip_suffix`: `skip` if `skip_pop_split` is true, otherwise omitted
@@ -356,7 +357,7 @@ Chromosome-level PLINK files are permanently stored for cross-session reuse:
   - If chromosome files exist, processing is **skipped entirely** (no execution)
   - Works **independently of `-resume`** - checked by pipeline logic in `main.nf`
   - Survives even after deleting work directory
-- **Cache key includes**: input format (vcf/pgen/bed), ancestry, assembly, MAF, kinship, skip_pop_split
+- **Cache key includes**: input format (vcf/pgen/bed), ancestry, assembly, r2thres, MAF, kinship, skip_pop_split
 - **Cleanup**: Only delete if you need to reprocess chromosomes from source files
 
 **Example - cumulative genome-wide analysis:**
