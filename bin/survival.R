@@ -72,7 +72,17 @@ n_rows = dim(input.genodata)[2]
 offset_col = 7 # offset for rawfile format
 
 print('finished loading data')
-data.merged = merge(data.covar, data.pheno)
+
+# Validate IID column exists in both files; #IID headers become X.IID after read.table sanitization
+for (src in list(list(df=data.covar, label='covar-file'), list(df=data.pheno, label='pheno-file'))) {
+  if (!('IID' %in% colnames(src$df))) {
+    stop(paste0("Error: 'IID' column not found in --", src$label, ". ",
+                "Found columns: ", paste(colnames(src$df), collapse=', '), ". ",
+                "If your file uses '#IID' as the header, rename it to 'IID'. ",
+                "Covariate files require '#FID' and 'IID' columns (use FID=0 if no family ID)."))
+  }
+}
+data.merged = merge(data.covar, data.pheno, by='IID')
 
 # Generate tstart and tend from time_col if they don't exist
 if (!('tstart' %in% colnames(data.merged)) && !('tend' %in% colnames(data.merged))) {
