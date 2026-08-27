@@ -434,9 +434,9 @@ If omitted, all samples are analyzed together as a single group.
 
 Use `run_metal.nf` when you already have long-gwas-outputs that you want meta-analysis.
 
-Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`
+Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`. This matches `GWASGLM`/`GWASCPH` output as-is.
 
-If the input is from GWASGALLOP, then modify the `run_metal.nf` to select the correct columns such as `BETAi`, `SEi`, `Pi` for intercept and `BETAs`, `SEs`, `Ps` for slope effect for the variants.
+`GWASGALLOP` output uses different column names for its slope and intercept effects (`BETAs`/`SEs`/`Ps` and `BETAi`/`SEi`/`Pi` respectively, instead of `BETA`/`SE`/`P`) — set `--metal_effect slope` or `--metal_effect intercept` to meta-analyse the corresponding GALLOP effect. Omitting `--metal_effect` (the default) assumes `GWASGLM`/`GWASCPH`-style `BETA`/`SE`/`P` columns; running it against GALLOP output without setting `--metal_effect` will silently produce an empty result, since METAL can't find columns named `BETA`/`SE`/`P` in that file.
 
 #### Example
 Do meta-analysis for survival results of EUR and AJ populations with google cloud batch.

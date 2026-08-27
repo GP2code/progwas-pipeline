@@ -17,16 +17,32 @@ nextflow.enable.dsl = 2
  *   --metal_pheno_name  Comma-separated phenotype names. If set, input files are
  *                       grouped by phenotype suffix (_<phenotype>_allresults.tsv)
  *                       and one METAL run is launched per phenotype.
+ *   --metal_effect      Which effect columns to meta-analyse (default: unset -> GLM/CPH):
+ *                         unset       BETA / SE / P            (GWASGLM, GWASCPH)
+ *                         slope       BETAs / SEs / Ps          (GWASGALLOP slope effect)
+ *                         intercept   BETAi / SEi / Pi          (GWASGALLOP intercept effect)
  */
 
 params.metal_input      = params.metal_input ?: null
 params.metal_outdir     = params.metal_outdir ?: "${launchDir}/metal_results"
 params.metal_prefix     = params.metal_prefix ?: "SURV_META"
 params.metal_pheno_name = params.metal_pheno_name ?: null
+params.metal_effect     = params.metal_effect ?: null
 
 if (!params.metal_input) {
     error "Missing required parameter: --metal_input"
 }
+
+def metalEffectColumns = [
+    'slope'    : ['BETAs', 'SEs', 'Ps'],
+    'intercept': ['BETAi', 'SEi', 'Pi'],
+].withDefault { null }
+
+if (params.metal_effect && !metalEffectColumns.containsKey(params.metal_effect)) {
+    error "Invalid --metal_effect '${params.metal_effect}': expected 'slope' or 'intercept' (omit for GLM/CPH default, which uses BETA/SE/P)"
+}
+
+def (metalEffectCol, metalStderrCol, metalPvalCol) = metalEffectColumns[params.metal_effect] ?: ['BETA', 'SE', 'P']
 
 def parsePhenoNames(value) {
   (value ?: '').split(',').collect { it.trim() }.findAll { it }
@@ -89,9 +105,9 @@ LABEL TotalSampleSize AS OBS_CT
 MARKER ID
 FREQ A1_FREQ
 ALLELE A1 A2
-EFFECT BETA
-STDERR SE
-PVAL P
+EFFECT ${metalEffectCol}
+STDERR ${metalStderrCol}
+PVAL ${metalPvalCol}
 WEIGHT OBS_CT
 METAL_EOF
 
