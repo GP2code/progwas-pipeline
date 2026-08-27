@@ -60,6 +60,15 @@ if (length(overlap) > 0) {
 data.pheno = read.table(opt[['pheno-file']], header=TRUE, comment.char='')
 data.covar = read.table(opt[['covar-file']], header=TRUE, comment.char='')
 
+# Normalize PLINK-style #IID/#FID headers: read.table sanitizes '#' -> 'X.'
+fix_plink_headers <- function(df) {
+  names(df) <- sub('^X\\.IID$', 'IID', names(df))
+  names(df) <- sub('^X\\.FID$', 'FID', names(df))
+  df
+}
+data.pheno <- fix_plink_headers(data.pheno)
+data.covar <- fix_plink_headers(data.covar)
+
 # function never completes on large rawfile
 #data.geno = read.table(opt$rawfile, header=TRUE, comment.char='')
 lines <- readLines(opt$rawfile)
@@ -73,16 +82,22 @@ offset_col = 7 # offset for rawfile format
 
 print('finished loading data')
 
-# Validate IID column exists in both files; #IID headers become X.IID after read.table sanitization
+# Validate IID column; fail fast before any merge
 for (src in list(list(df=data.covar, label='covar-file'), list(df=data.pheno, label='pheno-file'))) {
   if (!('IID' %in% colnames(src$df))) {
     stop(paste0("Error: 'IID' column not found in --", src$label, ". ",
                 "Found columns: ", paste(colnames(src$df), collapse=', '), ". ",
-                "If your file uses '#IID' as the header, rename it to 'IID'. ",
-                "Covariate files require '#FID' and 'IID' columns (use FID=0 if no family ID)."))
+                "Both files require an 'IID' column (or '#IID', which is also accepted)."))
   }
 }
 data.merged = merge(data.covar, data.pheno, by='IID')
+
+# Guard: covar must be one row per person; more merged rows than pheno rows means duplicate covar IIDs
+if (nrow(data.merged) > nrow(data.pheno)) {
+  stop(paste0("Error: merged data has ", nrow(data.merged), " rows but phenotype file has only ",
+              nrow(data.pheno), " rows. ",
+              "The covariate file likely contains duplicate IIDs."))
+}
 
 # Generate tstart and tend from time_col if they don't exist
 if (!('tstart' %in% colnames(data.merged)) && !('tend' %in% colnames(data.merged))) {
