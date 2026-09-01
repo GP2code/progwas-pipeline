@@ -17,7 +17,7 @@ Although you can install Workbench CLI on your local machine, you can only acces
     - Description: "Bucket for Nextflow run logs and output"
   - `+ Data from catalog` → GP2 tier 2 data (if needed)
 - Create App instance to run Nextflow:
-  - `+ Add repository` → longgwas repository (`https://github.com/hirotaka-i/long-gwas-pipeline.git`)
+  - `+ Add repository` → longgwas repository (`https://github.com/hirotaka-i/progwas-pipeline.git`)
   - `+ New app instance` → Jupyter Lab (default settings)
 
 ## Running on VWB
@@ -36,8 +36,9 @@ echo $WORKBENCH_USER_EMAIL
 
 **Set environment variables for the pipeline:**
 ```bash
+export NXF_SYNTAX_PARSER=v1
 export STORE_ROOT='gs://<your-bucket-name>'  # Bucket you created above
-export PROJECT_NAME='testrun'                # Any name for your project
+export PROJECT_NAME='testrun'                # Any name for your project folder
 export TOWER_ACCESS_TOKEN='<your-token>'    # Get from https://cloud.seqera.io/tokens
 export REFERENCE_DIR='gs://<your-bucket-name>/References' # Your Reference Data Locations
 ```
@@ -45,6 +46,7 @@ export REFERENCE_DIR='gs://<your-bucket-name>/References' # Your Reference Data 
 **Pro tip**: Save these to `~/.vwb.env` for reuse:
 ```bash
 cat > ~/.vwb.env << 'EOF'
+export NXF_SYNTAX_PARSER=v1
 export STORE_ROOT='gs://your-bucket-name'
 export PROJECT_NAME='my_analysis'
 export TOWER_ACCESS_TOKEN='your-token'
@@ -57,12 +59,12 @@ source ~/.vwb.env
 
 **Run the pipeline:**
 ```bash
-cd ~/repos/longgwas
+cd ~/repos/progwas-pipeline
 git pull origin main  # Update to latest code
 
 wb nextflow -log z_$(date +%Y%m%d_%H%M%S).log run main.nf \
   -profile gcb_vwb \
-  -params-file params.yml \
+  -params-file ./example/params_YML/test_cs_linear.yml \
   -with-tower \
   -resume
 ```

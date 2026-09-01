@@ -1,5 +1,5 @@
 # Example parameters for full genome analysis
-# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file conf/examples/full_genome.yml
+# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file example/params_YML/full_genome.yml
 
 # Input files - REPLACE WITH YOUR DATA
 input: "/path/to/your/genotypes/*.vcf.gz" # make sure not to include sex chromosomes.

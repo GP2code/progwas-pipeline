@@ -15,7 +15,7 @@ if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
 if (missingParams) {
     error("Missing required parameter(s):\n" +
           missingParams.collect { "  - ${it}" }.join('\n') +
-          "\nProvide them via -params-file or --param value. See conf/examples/ for templates.")
+          "\nProvide them via -params-file or --param value. See example/params_YML/ for templates.")
 }
 
 /*
