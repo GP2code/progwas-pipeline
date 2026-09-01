@@ -1,6 +1,6 @@
 # Cross-cohort METAL meta-analysis example
 # Usage:
-#   nextflow run run_metal.nf -profile gcb_final -params-file conf/examples/metal_cross_cohort.yml
+#   nextflow run run_metal.nf -profile gcb_vwb -params-file conf/examples/metal_cross_cohort.yml
 
 metal_input: "gs://<YOUR_BUCKET>/analyses/*/UPDRS_*_CS/gwas_results/glm/EUR_case_*_allresults.tsv"
 metal_pheno_name: "UPDRS_pI,UPDRS_pII,UPDRS_pIII"

@@ -44,7 +44,7 @@ cpu_usage = cpu["usage"]
 print(f"SSD_TOTAL_GB: limit={ssd_limit:.0f}  current_usage={ssd_usage:.0f}")
 print(f"CPUS:         limit={cpu_limit:.0f}  current_usage={cpu_usage:.0f}")
 print()
-print("Add to your -params-file (or pass as --param) for -profile gcb_scaleable:")
+print("Add to your -params-file (or pass as --param) for -profile gcb_vwb:")
 print(f"  gcb_ssd_quota_gb: {ssd_limit:.0f}")
 print(f"  gcb_cpu_quota: {cpu_limit:.0f}")
 '

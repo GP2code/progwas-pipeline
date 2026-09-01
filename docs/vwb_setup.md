@@ -61,7 +61,7 @@ cd ~/repos/longgwas
 git pull origin main  # Update to latest code
 
 wb nextflow -log z_$(date +%Y%m%d_%H%M%S).log run main.nf \
-  -profile gcb_final \
+  -profile gcb_vwb \
   -params-file params.yml \
   -with-tower \
   -resume
@@ -71,7 +71,7 @@ wb nextflow -log z_$(date +%Y%m%d_%H%M%S).log run main.nf \
 - `wb nextflow` - Workbench-wrapped Nextflow command
 - `-log z_$(date +%Y%m%d_%H%M%S).log` - Timestamped log file (sorted last in directory)
 - `run main.nf` - Main pipeline script
-- `-profile gcb_final` - Recommended Google Cloud Batch profile for Verily Workbench
+- `-profile gcb_vwb` - Recommended Google Cloud Batch profile for Verily Workbench
 - `-params-file params.yml` - Parameter configuration file
 - `-with-tower` - Enable Seqera Platform monitoring
 - `-resume` - Resume from last successful checkpoint

@@ -160,7 +160,7 @@ log.info """\
  genetic cache key                        : ${params.genetic_cache_key}
  """
 
-if (workflow.profile?.contains('gcb_final') || workflow.profile?.contains('gcb_scaleable')) {
+if (workflow.profile?.contains('gcb_vwb')) {
     def region = 'europe-west4'
     def configuredSsd = params.containsKey('gcb_ssd_quota_gb') ? params.gcb_ssd_quota_gb : 500
     def configuredCpu = params.containsKey('gcb_cpu_quota') ? params.gcb_cpu_quota : 200
@@ -193,7 +193,7 @@ if (workflow.profile?.contains('gcb_final') || workflow.profile?.contains('gcb_s
         log.info """\
  GCP quota detected for region ${region}:
    SSD limit : ${detected.ssd}GB  |  CPU limit : ${detected.cpu} cores
- Pipeline allocation (-profile gcb_scaleable):
+ Pipeline allocation (-profile gcb_vwb):
    gcb_ssd_quota_gb : ${configuredSsd}  |  gcb_cpu_quota : ${configuredCpu}
 ${statusMsg}
  """
