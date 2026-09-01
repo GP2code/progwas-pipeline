@@ -1,8 +1,6 @@
 # add DS_store
 .DS_Store
 
-FINAL_CLAUDE_README.md
-
 # vim swp files
 *.swp
 *.swo
@@ -165,3 +163,6 @@ test*
 temp*
 proj*
 proj*/
+
+# Example param YAMLs are tracked despite the test*/params_*.yml rules above.
+!example/params_YML/*.yml

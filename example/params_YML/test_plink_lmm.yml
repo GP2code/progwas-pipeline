@@ -1,0 +1,49 @@
+# Example parameters for test dataset with PLINK input format (LMM/GALLOP)
+# input should be chromosome split PLINK files (pgen or bed)
+## psam/pvar or bim/fam are also required in the same folder
+# vcf workflow is better than this plink workflow in many aspects,
+## multi-alellic splitting, ref/alt-aware liftover, imputation quality filtering, more parallelization. ..
+# Usage: nextflow run main.nf -profile localtest -params-file example/params_YML/test_plink_lmm.yml
+
+# Input files - using PLINK format instead of VCF
+input: "${projectDir}/example/genotype_plink/chr*.pgen"
+covarfile: "${projectDir}/example/covariates.tsv"
+phenofile: "${projectDir}/example/phenotype.lt.tsv"
+
+# Variable names in covariate/phenotype files
+pheno_name: "y"
+covar_numeric: "SEX age_at_baseline PC1 PC2"
+covar_categorical: "site specimen"
+study_arm_col: "study_arm"
+time_col: "study_days"
+
+# Analysis type - Longitudinal Mixed Model
+linear_flag: false
+longitudinal_flag: true
+survival_flag: false
+
+# Processing options
+chunk_flag: false  # PLINK files are not chunked (per-chromosome already)
+chunk_size: 30000
+
+# Quality control parameters
+r2thres: -9  # Not applicable to PLINK format
+geno: "0.1"
+minor_allele_freq: "0.05"
+minor_allele_ct: "20"
+hwe: "1e-6"
+mind: "0.05"
+kinship: "0.177"
+
+# Genetic parameters
+ancestry: "EUR"
+assembly: "hg19"  # Set to hg38 to skip liftover (test data is hg19, will be treated as hg38)
+
+# Skip population splitting mode
+skip_pop_split: true
+
+# Dataset identifier
+analysis_name: "TEST_PLINK_LMM"
+
+# Visualization
+mh_plot: false

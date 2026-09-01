@@ -1,0 +1,44 @@
+# Example parameters for test dataset (chromosomes 20-22)
+# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file example/params_YML/test_survival_interact.yml
+
+# Input files - using example data
+# Note: Use ${projectDir} or absolute paths when running from GitHub
+input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+covarfile: "${projectDir}/example/covariates.tsv"
+phenofile: "${projectDir}/example/phenotype.surv.tsv"
+
+# Variable names in covariate/phenotype files
+pheno_name: "surv_y"
+covar_numeric: "SEX age_at_baseline PC1 PC2"
+covar_interact: "age_at_baseline"  # Test SNP x age_at_baseline interaction (must be numeric)
+study_arm_col: "study_arm"
+# tstart, tend columns should be included in the phenotype file for survival analysis
+
+# Analysis type
+linear_flag: false
+longitudinal_flag: false
+survival_flag: true
+
+# Processing options
+chunk_flag: true
+chunk_size: 30000
+
+# Quality control parameters
+r2thres: -9  # Disable imputation quality filter for test
+geno: "0.1"
+minor_allele_freq: "0.05"
+minor_allele_ct: "20"
+hwe: "1e-6"
+mind: "0.05"
+kinship: "0.177"
+
+# Genetic parameters
+ancestry: "EUR"
+assembly: "hg19"
+skip_pop_split: false
+
+# Dataset identifier
+analysis_name: "TEST_SURV_INTERACT"
+
+# Visualization
+mh_plot: true

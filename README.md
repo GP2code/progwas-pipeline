@@ -94,9 +94,9 @@ Create a file with necessary environment variables, which should be loaded befor
 ```bash
 cat > ~/.env << 'EOF'
 export NXF_SYNTAX_PARSER=v1
-export STORE_ROOT='/your/project/dir' # replace with project directory
+export STORE_ROOT='~/longGWAS/test_run' # replace with project directory
 export PROJECT_NAME='my_analysis' # name of folder where results are stored (i.e. STORE_ROOT/PROJECT_NAME/)
-export REFERENCE_DIR='/your/project/dir/References' # where References are stored
+export REFERENCE_DIR='~/longGWAS/progwas-pipeline-dev/References' # where References are stored
 EOF
 ```
 
@@ -116,9 +116,9 @@ To run an example **cross-sectional GLM** locally:
 ```bash
 source ~/.env
 
-cd ~/path/to/progwas-pipeline
+cd ~/longGWAS/progwas-pipeline-dev
 
-wb nextflow -log LOG_$(date +%Y%m%d_%H%M%S).log run main.nf \
+nextflow -log LOG_$(date +%Y%m%d_%H%M%S).log run main.nf \
   -profile standard \
   -params-file ./example/params_YML/test_cs_linear.yml \
   -resume
