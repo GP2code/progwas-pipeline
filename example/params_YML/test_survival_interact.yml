@@ -3,7 +3,7 @@
 
 # Input files - using example data
 # Note: Use ${projectDir} or absolute paths when running from GitHub
-input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+input: "${projectDir}/example/genotype/chr2[0-2].vcf" # for PLINK files, use ${projectDir}/example/genotype_plink/chr2[1-2].pgen
 covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.surv.tsv"
 

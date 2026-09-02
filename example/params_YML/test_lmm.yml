@@ -2,7 +2,7 @@
 # Usage: nextflow run main.nf -profile standard -params-file example/params_YML/test_lmm.yml
 
 # Input files - using example data
-input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+input: "${projectDir}/example/genotype/chr2[0-2].vcf" # for PLINK files, use ${projectDir}/example/genotype_plink/chr2[0-2].pgen
 covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.lt.tsv"
 
