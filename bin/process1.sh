@@ -7,17 +7,17 @@
 # 2. Liftover to hg38 (if needed)
 # 3. Split multiallelics
 # 4. Left-normalize on hg38
-# 5. Keep only well-behaved SNPs (MAC≥2, ref-aligned, no provisional, no dups, geno<GENO)
+# 5. Keep only well-behaved SNPs (MAC≥2, ref-aligned, no provisional, no dups, geno<0.1)
 # 6. Standard naming chr:pos:ref:alt
 
-## e.g. process1.sh 2 '/data/CARD/PD/imputed_data/CORIELL/chr21.dose.vcf.gz' 0.3 hg19 chr21_cor 0.1
+## e.g. process1.sh 2 '/data/CARD/PD/imputed_data/CORIELL/chr21.dose.vcf.gz' 0.3 hg19 chr21_cor
 ## e.g. using docker:
 # rm -rf test_output && mkdir -p References test_output && docker run --rm \
 #   -v "$PWD:/workspace" \
 #   -v "$PWD/References:/workspace/References" \
 #   -e RESOURCE_DIR=/workspace/References \
 #   -w /workspace \
-#   longgwas:slim bash -c "cd test_output && bash ../bin/process1.sh 2 ../example/genotype/chr21.vcf -9 hg19 chr21_test 0.1 2>&1 | tee process1.log"
+#   longgwas:slim bash -c "cd test_output && bash ../bin/process1.sh 2 ../example/genotype/chr21.vcf -9 hg19 chr21_test 2>&1 | tee process1.log"
 
 
 # Parameters
@@ -26,7 +26,6 @@ VFILE=$2
 R2THRES=$3 # If imputed, give a number for R2 threshold (usually 0.3 - 0.8) -9 otherwise
 ASSEMBLY=$4 # [hg18, hg19, hg38]. Define if the liftover is required or not
 FILE=$5 # Base file name. can be anything as long as unique
-GENO=${6:-0.1} # Variant missingness threshold for geno filter (default 0.1 if not provided)
 
 # Resources (References always mounted from host)
 RESOURCE_DIR=${RESOURCE_DIR:-./References}
@@ -182,7 +181,7 @@ plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_noprov --make-p
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned --make-pgen --set-all-var-ids 'chr@:#:$r:$a' --out ${FILE}_split_hg38_normalized_snps_aligned_renamed
 # remove dup
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed --make-pgen --rm-dup exclude-all --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq
-# geno filter (lenient default because potentially mixed ancestry samples)
-plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno ${GENO} dosage --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01
+# geno 0.1 filter (lenient because potentially mixed ancestry samples)
+plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq --make-pgen --geno 0.1 dosage --out ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01
 # convert to plink pgen format with standardized pvar columns for merging
 plink2 --threads ${N} --pfile ${FILE}_split_hg38_normalized_snps_aligned_renamed_uniq_geno01 --make-pgen 'pvar-cols=' --out ${FILE}_p1out

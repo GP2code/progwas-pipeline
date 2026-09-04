@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Standardize plink files: dedup, optional liftover, normalize to hg38
 # Alternative to process1.sh for when input is already in plink format
-# Usage: process_plink.sh <threads> <bfile_or_pfile> <assembly> <output_prefix> [r2thres] [geno]
+# Usage: process_plink.sh <threads> <bfile_or_pfile> <assembly> <output_prefix> [r2thres]
 
 set -euo pipefail
 
@@ -10,7 +10,6 @@ INFILE=$2     # Input bfile/pfile prefix (without .bed/.pgen extension)
 ASSEMBLY=$3   # hg19, hg38
 OUTPREFIX=$4  # Output file prefix
 R2THRES=${5:-0.3}  # R2 threshold (default 0.3 if not provided)
-GENO=${6:-0.1}     # Variant missingness threshold (default 0.1 if not provided)
 
 # Resources (References always mounted from host)
 RESOURCE_DIR=${RESOURCE_DIR:-/workspace/References}
@@ -148,10 +147,10 @@ plink2 --pfile "$WORKPFX" \
        --out "${OUTPREFIX}_norm"
 rm -f "${WORKPFX}".{pgen,pvar,psam,log}
 
-# Step 4: geno filter and convert to hard-call
+# Step 4: geno 0.1 and convert to hard-call
 ## without this process, raw file has dosage and inconsistent with VCF-based processing)
 plink2 --pfile "${OUTPREFIX}_norm" \
-       --geno ${GENO} \
+       --geno 0.1 \
        --make-pgen \
        --threads "$N" \
        --out "${OUTPREFIX}_geno_hc"

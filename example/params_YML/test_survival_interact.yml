@@ -25,7 +25,7 @@ chunk_size: 30000
 
 # Quality control parameters
 r2thres: -9  # Disable imputation quality filter for test
-geno: "0.1"
+geno: "0.05"
 minor_allele_freq: "0.05"
 minor_allele_ct: "20"
 hwe: "1e-6"

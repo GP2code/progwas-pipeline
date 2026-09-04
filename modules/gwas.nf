@@ -67,6 +67,7 @@ process GWASGLM {
                 --maf ${params.minor_allele_freq} \
                 --mac ${params.minor_allele_ct} \
                 --hwe ${params.hwe} \
+                --geno ${params.geno} \
                 --parameters 1-\${INTERACTION_IDX} \
                 --tests 1,\${INTERACTION_IDX} \
                 --threads ${task.cpus} \
@@ -136,6 +137,7 @@ process GWASGLM {
                 --maf ${params.minor_allele_freq} \
                 --mac ${params.minor_allele_ct} \
                 --hwe ${params.hwe} \
+                --geno ${params.geno} \
                 --threads ${task.cpus} \
                 --memory ${task.memory.toMega()} \
                 --out ${outfile}

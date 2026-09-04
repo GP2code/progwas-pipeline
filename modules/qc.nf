@@ -178,8 +178,7 @@ process GENETICQC {
     ${fChunk} \
     ${params.r2thres} \
     ${params.assembly} \
-    ${prefix} \
-    ${params.geno}
+    ${prefix}
   
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')
@@ -271,8 +270,7 @@ process GENETICQCPLINK {
     ${fileTag} \
     ${params.assembly} \
     ${outputPrefix} \
-    ${params.r2thres} \
-    ${params.geno}
+    ${params.r2thres}
   
   EXIT_CODE=\$?
   END_TIME=\$(date '+%Y-%m-%d %H:%M:%S')

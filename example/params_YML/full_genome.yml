@@ -23,7 +23,7 @@ chunk_size: 30000  # Number of variants per chunk
 
 # Quality control parameters
 r2thres: 0.8  # Imputation quality filter (set to -9 to disable)
-geno: "0.1"
+geno: "0.05"
 minor_allele_freq: "0.01"
 minor_allele_ct: "20"
 hwe: "1e-6"

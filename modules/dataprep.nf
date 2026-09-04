@@ -176,6 +176,7 @@ process RAWFILE_EXPORT {
         --mac ${params.minor_allele_ct} \
         --maf ${params.minor_allele_freq} \
         --hwe ${params.hwe} \
+        --geno ${params.geno} \
         --make-pgen \
         --threads ${task.cpus} \
         --memory ${task.memory.toMega()} \
