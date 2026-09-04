@@ -137,6 +137,8 @@ wb nextflow -log LOG_$(date +%Y%m%d_%H%M%S).log run main.nf \
   -with-tower -resume
 ```
 
+For Batch jobs on a plain (non-VWB) GCP project, you may use `-profile gcb_gcp` instead.
+
 For other example scripts and detailed information on parameter specification and .YML file settings, please consult the `./docs/tmp_docs.md` (work in progress).
 
 
