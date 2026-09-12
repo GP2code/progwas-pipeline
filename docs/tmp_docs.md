@@ -173,7 +173,7 @@ cd ./Docker
 export NXF_SINGULARITY_CACHEDIR=/data/$USER/nxf_singularity_cache;
 export SINGULARITY_CACHEDIR=/data/$USER/.singularity;
 
-singularity build long-gwas-pipeline.sif docker://ghcr.io/hirotaka-i/long-gwas-pipeline:latest
+singularity build long-gwas-pipeline.sif docker://ghcr.io/gp2code/progwas-pipeline:1.0.0
 cd ..
 
 # Submit the slurm job from the main directory

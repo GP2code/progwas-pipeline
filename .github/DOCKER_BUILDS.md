@@ -50,13 +50,12 @@ You can also manually trigger the workflow:
 
 ## Image Tags
 
-After pushing `v2.0.0`, the following tags will be available:
+After pushing `v1.0.0`, the following tags will be available:
 
-- `ghcr.io/hirotaka-i/long-gwas-pipeline:2.0.0`
-- `ghcr.io/hirotaka-i/long-gwas-pipeline:2.0`
-- `ghcr.io/hirotaka-i/long-gwas-pipeline:2`
-- `ghcr.io/hirotaka-i/long-gwas-pipeline:latest`
-- `ghcr.io/hirotaka-i/long-gwas-pipeline:slim`
+- `ghcr.io/gp2code/progwas-pipeline:1.0.0`
+- `ghcr.io/gp2code/progwas-pipeline:1.0`
+- `ghcr.io/gp2code/progwas-pipeline:1`
+- `ghcr.io/gp2code/progwas-pipeline:latest`
 
 ## Using Versioned Images
 
@@ -64,11 +63,11 @@ In your profile configs, you can now reference specific versions:
 
 ```groovy
 process {
-    container = 'ghcr.io/hirotaka-i/long-gwas-pipeline:2.0.0'  // Specific version
+  container = 'ghcr.io/gp2code/progwas-pipeline:1.0.0'  // Specific version
     // or
-    container = 'ghcr.io/hirotaka-i/long-gwas-pipeline:2'      // Major version
+  container = 'ghcr.io/gp2code/progwas-pipeline:1'      // Major version
     // or
-    container = 'ghcr.io/hirotaka-i/long-gwas-pipeline:latest' // Latest release
+  container = 'ghcr.io/gp2code/progwas-pipeline:latest' // Latest release
 }
 ```
 
@@ -77,13 +76,13 @@ process {
 Images are public (after you set visibility) and can be pulled without authentication:
 
 ```bash
-docker pull ghcr.io/hirotaka-i/long-gwas-pipeline:latest
+docker pull ghcr.io/gp2code/progwas-pipeline:1.0.0
 ```
 
 For Singularity (on HPC):
 
 ```bash
-singularity pull docker://ghcr.io/hirotaka-i/long-gwas-pipeline:latest
+singularity pull docker://ghcr.io/gp2code/progwas-pipeline:1.0.0
 ```
 
 ## Workflow Features
