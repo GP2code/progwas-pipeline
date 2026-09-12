@@ -141,6 +141,55 @@ For Batch jobs on a plain (non-VWB) GCP project, you may use `-profile gcb_gcp` 
 
 For other example scripts and detailed information on parameter specification and .YML file settings, please consult the `./docs/tmp_docs.md` (work in progress).
 
+## Graphic Overview
+
+```mermaid
+graph TD
+    %% Input and Initialization
+    StartGen([VCF or PLINK data]) --> CheckRef[CHECK_REFERENCES]
+    StartPheno([Phenotypes + Covariates]) --> MakeSets
+    
+    %% Genetic QC Phase
+    CheckRef --> IsPlink{Input Type?}
+    IsPlink -- VCF --> SplitVCF[SPLIT_VCF]
+    SplitVCF --> GenQC[GENETIC_QC Chunks]
+    GenQC --> MergeChunks[MERGE_CHUNKS]
+    
+    IsPlink -- PLINK --> GenQCPlink[GENETIC_QC_PLINK]
+    
+    MergeChunks --> MergeChr[MERGER_CHRS: All Chromosomes]
+    GenQCPlink --> MergeChr
+    
+    %% Population and PCA Phase
+    MergeChr --> PopSplit{Skip Pop Split?}
+    PopSplit -- No --> GWASQC[GWASQC: Ancestry Inference]
+    PopSplit -- Yes --> SimpleQC[SIMPLE_QC: Basic QC]
+    
+    GWASQC --> MakeSets[MAKE_ANALYSIS_SETS]
+    SimpleQC --> MakeSets
+    MakeSets --> ComputePCA[COMPUTE_PCA & MERGE_PCA]
+    
+    %% Analysis Branching
+    ComputePCA --> ModelType{Analysis Type?}
+    
+    ModelType -- Longitudinal --> RawExp1[RAWFILE_EXPORT]
+    RawExp1 --> Gallop[GWAS_GALLOP]
+    
+    ModelType -- Survival --> RawExp2[RAWFILE_EXPORT]
+    RawExp2 --> CPH[GWAS_CPH]
+    
+    ModelType -- Cross-sectional --> PlinkExp[EXPORT_PLINK]
+    PlinkExp --> GLM[GWAS_GLM]
+    
+    %% Results Management
+    Gallop --> Save[SAVE_GWAS]
+    CPH --> Save
+    GLM --> Save
+    
+    Save --> Plot[MANHATTAN PLOT]
+    Plot --> End([Final Results])
+```
+
 
 ## Support
 
