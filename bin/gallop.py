@@ -163,6 +163,11 @@ def preprocess(dp, dc, ds, covar_numeric=None, covar_categorical=None,
   
   freq = freq.dropna()
   df = pd.merge(dp, dc, left_on='IID', right_on='IID', how='inner')
+  # covar must be one row per person; more merged rows than pheno rows means duplicate covar IIDs
+  if len(df) > len(dp):
+    raise ValueError(
+        f"Merged data has {len(df)} rows but phenotype file has {len(dp)} rows. "
+        "The covariate file likely contains duplicate IIDs.")
   df = df[df.IID.isin(id_in_study)]
 
   if time_name is not None:
@@ -526,6 +531,13 @@ def load(fn, hdf_key=None):
   else:
     raise Exception("Unknown extension for phenotype")
 
+  # normalize #IID / #FID headers (pandas keeps '#' literally unlike R)
+  df = df.rename(columns={'#IID': 'IID', '#FID': 'FID'})
+  if 'IID' not in df.columns:
+    raise ValueError(
+        f"'IID' column not found in {fn}. "
+        f"Found columns: {list(df.columns)}. "
+        "Both files require an 'IID' column (or '#IID', which is also accepted).")
   df['IID'] = df['IID'].astype(str)
   return df
 
