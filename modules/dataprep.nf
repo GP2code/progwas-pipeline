@@ -175,7 +175,8 @@ process RAWFILE_EXPORT {
         --keep ${filtered_prefix}.keep.iid.tsv \
         --mac ${params.minor_allele_ct} \
         --maf ${params.minor_allele_freq} \
-        --hwe 1e-6 \
+        --hwe ${params.hwe} \
+        --geno ${params.geno} \
         --make-pgen \
         --threads ${task.cpus} \
         --memory ${task.memory.toMega()} \

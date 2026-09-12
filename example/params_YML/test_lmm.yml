@@ -1,8 +1,8 @@
 # Example parameters for test dataset with longitudinal mixed models (LMM/GALLOP)
-# Usage: nextflow run main.nf -profile standard -params-file conf/examples/test_lmm.yml
+# Usage: nextflow run main.nf -profile standard -params-file example/params_YML/test_lmm.yml
 
 # Input files - using example data
-input: "${projectDir}/example/genotype/chr2[0-2].vcf"
+input: "${projectDir}/example/genotype/chr2[0-2].vcf" # for PLINK files, use ${projectDir}/example/genotype_plink/chr2[0-2].pgen
 covarfile: "${projectDir}/example/covariates.tsv"
 phenofile: "${projectDir}/example/phenotype.lt.tsv"
 
@@ -24,8 +24,11 @@ chunk_size: 30000
 
 # Quality control parameters
 r2thres: -9  # Disable imputation quality filter for test data
+geno: "0.05"
 minor_allele_freq: "0.05"
 minor_allele_ct: "20"
+hwe: "1e-6"
+mind: "0.05"
 kinship: "0.177"
 
 # Genetic parameters

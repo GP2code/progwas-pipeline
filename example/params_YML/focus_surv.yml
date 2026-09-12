@@ -5,10 +5,10 @@
 # Required inputs
 focus_plink_input: '${projectDir}/example/genotype_plink/chr22.pgen'  # Plink file path (.pvar, .psam expected at same prefix)
 focus_covar_file: '${projectDir}/example/covariates.tsv'  # Covariate file (can reuse from main pipeline's output)
-focus_pheno_name: 'y'  # Phenotype column name to analyze
+focus_pheno_name: 'surv_y'  # Phenotype column name to analyze (event indicator for survival; continuous outcome for GLM/longitudinal)
 
 # Optional
-focus_strata_file: '${projectDir}/example/focus_strata.tsv'  # Path to TSV with #FID, IID and STRATA columns (for stratified GWAS)
+# focus_strata_file: '${projectDir}/example/focus_strata.tsv'  # Path to TSV with #FID, IID and STRATA columns (for stratified GWAS)
 
 # ==================== INHERITED ANALYSIS PARAMETERS ====================
 # These should match or be modified from main pipeline config
@@ -17,9 +17,9 @@ phenofile: "${projectDir}/example/phenotype.surv.tsv"
 
 # Analysis type (choose one)
 longitudinal_flag: false
-survival_flag: false
+survival_flag: true
 # For survival: set to true and specify time column below
-# time_col: 'study_days'  # Column name for survival time in phenotype file
+time_col: 'study_days'  # Column name for survival time in phenotype file
 
 # Covariates
 covar_numeric: 'age_at_baseline SEX'
@@ -28,7 +28,7 @@ covar_cat_min_count: 10  # Minimum count for categorical levels (smaller groups 
 covar_interact: ''  # For interaction testing in GLM
 
 # ==================== OUTPUT CONFIGURATION ====================
-analysis_name: 'cs'  # Subdirectory for this focused analysis
+analysis_name: 'surv'  # Subdirectory for this focused analysis
 project_dir: 'test_focus'  # Base output directory for this analysis (can be same as main pipeline or separate)
 genetic_data_id: 'focus'  # Used as cache key in output path: project_dir/analyses/focus/analysis_name/
 genetic_cache_key: 'NA'  # No caching for focused analysis (or set to same key as main pipeline if desired)
@@ -38,7 +38,8 @@ publish_gwas_results  : true # Need to be true
 # ==================== GWAS OPTIONS ====================
 minor_allele_freq: 0.01
 minor_allele_ct: 10
+hwe: 1e-6
 no_chunk_export: true  # Export all variants in one pass; no chunking needed for small focus variant sets
 
 
-# example usage: nextflow run run_focus.nf -profile standard -params-file conf/examples/focus.yml
+# example usage: nextflow run run_focus.nf -profile standard -params-file example/params_YML/focus_surv.yml

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Standardize plink files: dedup, optional liftover, normalize to hg38
 # Alternative to process1.sh for when input is already in plink format
-# Usage: process_plink.sh <threads> <bfile_or_pfile> <assembly> <output_prefix>
+# Usage: process_plink.sh <threads> <bfile_or_pfile> <assembly> <output_prefix> [r2thres]
 
 set -euo pipefail
 

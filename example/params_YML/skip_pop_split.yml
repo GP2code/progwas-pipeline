@@ -1,5 +1,5 @@
 # Example parameters for ancestry-specific imputed data (skip population splitting)
-# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file conf/examples/skip_pop_split.yml
+# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file example/params_YML/skip_pop_split.yml
 
 # Input files - REPLACE WITH YOUR DATA
 input: "/path/to/ancestry_specific/*.vcf.gz"
@@ -23,8 +23,11 @@ chunk_size: 30000
 
 # Quality control parameters
 r2thres: 0.8
+geno: "0.05"
 minor_allele_freq: "0.01"
 minor_allele_ct: "20"
+hwe: "1e-6"
+mind: "0.05"
 kinship: "0.177"
 
 # Genetic parameters

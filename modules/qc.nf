@@ -501,7 +501,8 @@ process SIMPLE_QC {
       "allchr_merged" \
       "${params.kinship}" \
       "${params.ancestry}_samplelist_p2out" \
-      ${task.cpus}
+      ${task.cpus} \
+      ${params.mind}
     """
 }
 
@@ -525,6 +526,7 @@ process GWASQC {
       --ref "/srv/GWAS-Pipeline/References/ref_panel/1kg_ashkj_ref_panel_gp2_pruned_hg38_newids" \
       --ref_labels "/srv/GWAS-Pipeline/References/ref_panel/ancestry_ref_labels.txt" \
       --pop "${params.ancestry}" \
-      --out "${params.ancestry}_samplelist_p2out"    
+      --out "${params.ancestry}_samplelist_p2out" \
+      --mind "${params.mind}"
     """
 }

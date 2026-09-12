@@ -17,16 +17,31 @@ nextflow.enable.dsl = 2
  *   --metal_pheno_name  Comma-separated phenotype names. If set, input files are
  *                       grouped by phenotype suffix (_<phenotype>_allresults.tsv)
  *                       and one METAL run is launched per phenotype.
+ *   --metal_effect      Which effect columns to meta-analyse (default: unset -> main term):
+ *                         unset         BETA / SE / P             (main term, all models)
+ *                         interaction   BETA_INT / SE_INT / P_INT (interaction term -- the
+ *                                       slope in GWASGALLOP, the interaction test in GLM/CPH)
  */
 
 params.metal_input      = params.metal_input ?: null
 params.metal_outdir     = params.metal_outdir ?: "${launchDir}/metal_results"
 params.metal_prefix     = params.metal_prefix ?: "SURV_META"
 params.metal_pheno_name = params.metal_pheno_name ?: null
+params.metal_effect     = params.metal_effect ?: null
 
 if (!params.metal_input) {
     error "Missing required parameter: --metal_input"
 }
+
+def metalEffectColumns = [
+    'interaction': ['BETA_INT', 'SE_INT', 'P_INT'],
+].withDefault { null }
+
+if (params.metal_effect && !metalEffectColumns.containsKey(params.metal_effect)) {
+    error "Invalid --metal_effect '${params.metal_effect}': expected 'interaction' (omit for the main-term default, which uses BETA/SE/P)"
+}
+
+def (metalEffectCol, metalStderrCol, metalPvalCol) = metalEffectColumns[params.metal_effect] ?: ['BETA', 'SE', 'P']
 
 def parsePhenoNames(value) {
   (value ?: '').split(',').collect { it.trim() }.findAll { it }
@@ -89,9 +104,9 @@ LABEL TotalSampleSize AS OBS_CT
 MARKER ID
 FREQ A1_FREQ
 ALLELE A1 A2
-EFFECT BETA
-STDERR SE
-PVAL P
+EFFECT ${metalEffectCol}
+STDERR ${metalStderrCol}
+PVAL ${metalPvalCol}
 WEIGHT OBS_CT
 METAL_EOF
 

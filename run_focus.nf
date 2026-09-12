@@ -5,7 +5,7 @@
  * Performs targeted GWAS on a subset of SNPs with optional stratification
  * 
  * Usage:
- *   nextflow run appendix/focus_analysis.nf -params-file appendix/focus.yml -profile standard
+ *   nextflow run run_focus.nf -params-file example/params_YML/focus_cs.yml -profile standard
  */
 
 nextflow.enable.dsl = 2
