@@ -57,7 +57,7 @@ For a detailed guide and instructions for Verily Workbench set up, please consul
 >   ```
 
 
-### 2. Clone Repository and Download References
+### 2. Clone Repository
 
 ```bash
 git clone https://github.com/hirotaka-i/progwas-pipeline.git
