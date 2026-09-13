@@ -134,6 +134,7 @@ RUN cd /tmp/bcftools-${BCFTOOLS_VERSION} && \
 
 RUN git clone https://github.com/explodecomputer/random-metal.git /tmp/random-metal && \
     cd /tmp/random-metal && \
+    git checkout adb39ae6c1209b2ee002f83dfae1d26a14350a6e && \
     make && \
     find /tmp/random-metal -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
     chmod +x /usr/local/bin/metal && \
