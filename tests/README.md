@@ -42,9 +42,10 @@ configs use in production, so it is in the core set even though the example
 genotypes are not really ancestry-specific — that flag just skips ancestry
 inference.
 
-## Why seven runs and not thirty-two
+## Why seven runs and not forty-eight
 
-The naive matrix is `2 inputs × 4 models × 2 interaction × 2 ID shapes = 32`.
+The naive matrix is `3 inputs × 4 models × 2 interaction × 2 ID shapes = 48`
+(32 if you count only VCF and PLINK and treat `.bed` as part of the PLINK path).
 Most of those cells are not independent:
 
 | Axis | Full size | Effective size | Why |

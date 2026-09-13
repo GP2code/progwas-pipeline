@@ -152,8 +152,18 @@ but ignored — it is dropped on read, so these two headers behave identically:
 IID     SEX    study_arm  ...
 ```
 
-IIDs must therefore be unique across the whole cohort. If no identifier column is
-present the run fails immediately with an error naming the columns it did find.
+An IID must identify exactly one subject, since with FID discarded the IID alone
+has to disambiguate samples. That is a constraint on subject *identity*, not on
+row counts:
+
+- covariate files carry one row per subject;
+- cross-sectional phenotype files carry one row per subject;
+- longitudinal and survival phenotype files carry **repeated rows per subject**,
+  one per visit — that is the expected shape, and `time_col` (plus
+  `tstart`/`tend` for survival) distinguishes the rows.
+
+If no identifier column is present the run fails immediately with an error naming
+the columns it did find.
 
 This applies only to phenotype and covariate files. Genotype files are separate:
 a PLINK1 `.fam` always carries an FID and a `.psam` may, and genetic QC
