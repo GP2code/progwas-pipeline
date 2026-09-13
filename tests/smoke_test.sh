@@ -9,15 +9,13 @@
 # statistical correctness.
 #
 # Usage:
-#   tests/smoke_test.sh                        # the 6 core scenarios
-#   tests/smoke_test.sh --tier all             # core + optional scenarios
+#   tests/smoke_test.sh                        # all 7 scenarios
 #   tests/smoke_test.sh --only vcf_glm,plink_gallop
 #   tests/smoke_test.sh --list
 #   tests/smoke_test.sh --dry-run
 #
 # Options:
-#   --tier core|all      Which scenario set to run (default: core)
-#   --only a,b,c         Run only these scenario ids (overrides --tier)
+#   --only a,b,c         Run only these scenario ids (default: all of them)
 #   --profile NAME       Nextflow profile (default: standard)
 #   --container IMAGE    Override process.container for every task
 #   --outdir DIR         Where to put results (default: .smoke_test/<timestamp>)
@@ -37,7 +35,6 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 # ------------------------------------------------------------------ defaults
-TIER="core"
 ONLY=""
 PROFILE="standard"
 CONTAINER=""
@@ -48,7 +45,6 @@ LIST_ONLY=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --tier)      TIER="$2"; shift 2 ;;
     --only)      ONLY="$2"; shift 2 ;;
     --profile)   PROFILE="$2"; shift 2 ;;
     --container) CONTAINER="$2"; shift 2 ;;
@@ -95,46 +91,50 @@ PROJECT_DIR="$STORE_ROOT/$PROJECT_NAME"
 #       interaction columns stay empty, i.e. that it is ignored outright rather
 #       than half-applied.
 #
-#   sample IDs {IID, FID+IID}
-#       Both genetic-QC paths call normalize_psam_iid_only.sh, so FID is stripped
-#       before anything model-specific sees it. The axis therefore needs covering
-#       once on the genotype side (an FID-bearing .psam) and once on the
-#       covariate side (a covariate file with no #FID column) -- not once per
-#       model.
+#   phenotype/covariate sample IDs {IID, FID+IID}
+#       NOT an axis any more. Every reader of a user-supplied phenotype or
+#       covariate file now goes through normalize_sample_ids() (bin/sample_ids.py,
+#       and the matching fix_plink_headers() in bin/survival.R), which drops any
+#       FID column on read. "#FID IID ..." and "IID ..." are therefore provably
+#       equivalent, so the shape rides along on scenarios picked for other
+#       reasons instead of multiplying the matrix. The suite still covers all
+#       four combinations at zero extra cost: the shipped covariates.tsv has
+#       "#FID IID", the shipped phenotype files are IID-only, and one scenario
+#       swaps both (IID-only covariates, FID-bearing phenotypes).
 #
-# The six core scenarios are a pairwise covering array over format x model,
-# model x interaction, and both ID shapes.
+#   genotype sample IDs {IID, FID+IID}
+#       Still a real axis, because it is resolved in the genetic-QC front end by
+#       normalize_psam_iid_only.sh rather than in Python. A .psam may be IID-only
+#       or carry FID, and a PLINK1 .fam always carries FID, so all three are run.
+#
+# The seven core scenarios are a pairwise covering array over format x model and
+# model x interaction, with the genotype ID shapes and skip_pop_split spread
+# across them.
 
-SCENARIOS_CORE="vcf_glm vcf_cph_interact vcf_gallop plink_fid_glm_interact plink_cph plink_gallop"
-SCENARIOS_EXTRA="bed_glm skip_pop_split_glm"
+SCENARIOS_CORE="vcf_glm vcf_cph_interact vcf_gallop plink_glm_interact plink_fid_gallop bed_cph skip_pop_split_glm"
 
 scenario_desc() {
   case "$1" in
-    vcf_glm)                echo "VCF  | GLM linear+logistic | no interact | psam IID     | covar #FID     | manhattan" ;;
-    vcf_cph_interact)       echo "VCF  | CoxPH               | interact    | psam IID     | covar IID-only" ;;
-    vcf_gallop)             echo "VCF  | GALLOP              | ignored     | psam IID     | covar #FID" ;;
-    plink_fid_glm_interact) echo "pgen | GLM linear+logistic | interact    | psam FID+IID | covar IID-only" ;;
-    plink_cph)              echo "pgen | CoxPH               | no interact | psam IID     | covar #FID" ;;
-    plink_gallop)           echo "pgen | GALLOP              | n/a         | psam IID     | covar IID-only" ;;
-    bed_glm)                echo "bed  | GLM linear+logistic | no interact | fam FID+IID  | covar #FID     | [extra]" ;;
-    skip_pop_split_glm)     echo "VCF  | GLM linear+logistic | no interact | psam IID     | covar #FID     | [extra] skip_pop_split=true" ;;
-    *)                      echo "(unknown scenario)" ;;
+    vcf_glm)             echo "VCF  | GLM linear+logistic | no interact | psam IID     | covar #FID, pheno IID | manhattan" ;;
+    vcf_cph_interact)    echo "VCF  | CoxPH               | interact    | psam IID     | covar IID, pheno #FID (swapped)" ;;
+    vcf_gallop)          echo "VCF  | GALLOP              | ignored     | psam IID     | covar #FID, pheno IID" ;;
+    plink_glm_interact)  echo "pgen | GLM linear+logistic | interact    | psam IID     | covar #FID, pheno IID" ;;
+    plink_fid_gallop)    echo "pgen | GALLOP              | n/a         | psam FID+IID | covar #FID, pheno IID" ;;
+    bed_cph)             echo "bed  | CoxPH               | no interact | fam FID+IID  | covar #FID, pheno IID" ;;
+    skip_pop_split_glm)  echo "VCF  | GLM linear+logistic | no interact | psam IID     | covar #FID, pheno IID | skip_pop_split=true" ;;
+    *)                   echo "(unknown scenario)" ;;
   esac
 }
 
 if [ "$LIST_ONLY" -eq 1 ]; then
-  printf '%-24s %s\n' "SCENARIO" "DESCRIPTION"
-  for s in $SCENARIOS_CORE $SCENARIOS_EXTRA; do
-    printf '%-24s %s\n' "$s" "$(scenario_desc "$s")"
+  printf '%-22s %s\n' "SCENARIO" "DESCRIPTION"
+  for s in $SCENARIOS_CORE; do
+    printf '%-22s %s\n' "$s" "$(scenario_desc "$s")"
   done
   exit 0
 fi
 
-case "$TIER" in
-  core) SCENARIOS="$SCENARIOS_CORE" ;;
-  all)  SCENARIOS="$SCENARIOS_CORE $SCENARIOS_EXTRA" ;;
-  *)    echo "Unknown --tier '$TIER' (expected core|all)" >&2; exit 2 ;;
-esac
+SCENARIOS="$SCENARIOS_CORE"
 
 if [ -n "$ONLY" ]; then
   SCENARIOS="$(echo "$ONLY" | tr ',' ' ')"
@@ -163,7 +163,8 @@ mkdir -p "$FIXTURES" "$PARAMSDIR" "$LOGDIR" "$STORE_ROOT" || exit 1
 # ---------------------------------------------------------------- fixtures
 #
 # Derived inputs the repo does not ship: a covariate file with no #FID column,
-# a PLINK set whose .psam carries a real FID, and a .bed/.bim/.fam set.
+# a phenotype file that does carry one, a PLINK set whose .psam carries a real
+# FID, and a .bed/.bim/.fam set.
 
 build_fixtures() {
   echo "==> building fixtures in $FIXTURES"
@@ -177,6 +178,17 @@ build_fixtures() {
     fail_hard "covariates.nofid.tsv still carries an FID column"
   fi
 
+  # Survival phenotype file WITH a leading #FID column. The shipped phenotype
+  # files are all IID-only, so this is the mirror case: it proves the pipeline
+  # drops an FID from the phenotype side too, not just the covariate side.
+  # FID is deliberately unequal to IID so a failure to drop it is visible.
+  awk -F'\t' -v OFS='\t' '
+    NR==1 { print "#FID", $0; next }
+          { print "fam_" $1, $0 }
+  ' example/phenotype.surv.tsv > "$FIXTURES/phenotype.surv.fid.tsv"
+  head -1 "$FIXTURES/phenotype.surv.fid.tsv" | grep -q '#FID' ||
+    fail_hard "phenotype.surv.fid.tsv is missing its #FID column"
+
   # PLINK set with FID+IID in the .psam. FID is deliberately different from IID
   # so normalize_psam_iid_only.sh has something real to strip.
   mkdir -p "$FIXTURES/plink_fid"
@@ -189,11 +201,12 @@ build_fixtures() {
     ' "example/genotype_plink/chr${chr}.psam" > "$FIXTURES/plink_fid/chr${chr}.psam"
   done
 
-  # PLINK1 binary set, for the .bed branch of bin/process_plink.sh.
+  # PLINK1 binary set, for the .bed branch of bin/process_plink.sh. A .fam always
+  # carries FID, so this also covers the FID-bearing genotype shape.
   # --max-alleles 2 is required: the example pgen carries multiallelic variants
   # and a PLINK1 .bim cannot represent those.
   case " $SCENARIOS " in
-    *" bed_glm "*)
+    *" bed_cph "*)
       if command -v plink2 >/dev/null; then
         mkdir -p "$FIXTURES/plink_bed"
         for chr in 20 21 22; do
@@ -203,8 +216,8 @@ build_fixtures() {
             fail_hard "plink2 --make-bed failed for chr${chr} (see $FIXTURES/plink_bed/chr${chr}.makebed.log)"
         done
       else
-        echo "    plink2 not on PATH -- skipping bed_glm" >&2
-        SCENARIOS="$(echo "$SCENARIOS" | sed 's/bed_glm//')"
+        echo "    plink2 not on PATH -- skipping bed_cph" >&2
+        SCENARIOS="$(echo "$SCENARIOS" | sed 's/bed_cph//')"
       fi
       ;;
   esac
@@ -231,6 +244,11 @@ write_params() {
   time_col="study_days"
   covarfile='${projectDir}/example/covariates.tsv'
 
+  # NOTE on covar_interact: the interaction covariate is deliberately
+  # age_at_baseline, which is NOT the first covariate column of the exported
+  # table (SEX is). That is the case that used to silently produce all-NA
+  # interaction columns, so it doubles as a regression test for the
+  # --parameters index fix in modules/gwas.nf.
   case "$id" in
     vcf_glm)
       input='${projectDir}/example/genotype/chr2[0-2].vcf'
@@ -238,9 +256,11 @@ write_params() {
       phenofile='${projectDir}/example/phenotype.cs2.tsv'; pheno_name="y,y2"
       interact=""; mh_plot=true ;;
     vcf_cph_interact)
+      # Both ID shapes swapped relative to every other scenario: IID-only
+      # covariates, FID-bearing phenotypes.
       input='${projectDir}/example/genotype/chr2[0-2].vcf'
       cache_id="smoke_vcf"; survival=true
-      phenofile='${projectDir}/example/phenotype.surv.tsv'; pheno_name="surv_y"
+      phenofile="$FIXTURES/phenotype.surv.fid.tsv"; pheno_name="surv_y"
       interact="age_at_baseline"
       covarfile="$FIXTURES/covariates.nofid.tsv" ;;
     vcf_gallop)
@@ -250,27 +270,20 @@ write_params() {
       # Set on purpose: GALLOP has no interaction support, so this asserts the
       # parameter is ignored rather than partially applied.
       interact="age_at_baseline" ;;
-    plink_fid_glm_interact)
+    plink_glm_interact)
+      input='${projectDir}/example/genotype_plink/chr2[0-2].pgen'
+      cache_id="smoke_plink"; linear=true
+      phenofile='${projectDir}/example/phenotype.cs2.tsv'; pheno_name="y,y2"
+      interact="age_at_baseline" ;;
+    plink_fid_gallop)
       input="$FIXTURES/plink_fid/chr2[0-2].pgen"
-      cache_id="smoke_plink_fid"; linear=true
-      phenofile='${projectDir}/example/phenotype.cs2.tsv'; pheno_name="y,y2"
-      interact="age_at_baseline"
-      covarfile="$FIXTURES/covariates.nofid.tsv" ;;
-    plink_cph)
-      input='${projectDir}/example/genotype_plink/chr2[0-2].pgen'
-      cache_id="smoke_plink"; survival=true
-      phenofile='${projectDir}/example/phenotype.surv.tsv'; pheno_name="surv_y"
-      interact="" ;;
-    plink_gallop)
-      input='${projectDir}/example/genotype_plink/chr2[0-2].pgen'
-      cache_id="smoke_plink"; longitudinal=true
+      cache_id="smoke_plink_fid"; longitudinal=true
       phenofile='${projectDir}/example/phenotype.lt.tsv'; pheno_name="y"
-      interact=""
-      covarfile="$FIXTURES/covariates.nofid.tsv" ;;
-    bed_glm)
+      interact="" ;;
+    bed_cph)
       input="$FIXTURES/plink_bed/chr2[0-2].bed"
-      cache_id="smoke_bed"; linear=true
-      phenofile='${projectDir}/example/phenotype.cs2.tsv'; pheno_name="y,y2"
+      cache_id="smoke_bed"; survival=true
+      phenofile='${projectDir}/example/phenotype.surv.tsv'; pheno_name="surv_y"
       interact="" ;;
     skip_pop_split_glm)
       input='${projectDir}/example/genotype/chr2[0-2].vcf'
@@ -414,6 +427,23 @@ check_scenario() {
 
     dups="$(dup_cols "$f")"
     [ -z "$dups" ] || add_err "$base: duplicated output columns: $dups"
+
+    # Most variants must actually be analysed, not silently discarded. An
+    # uncentered interaction covariate used to trip plink2's variance-inflation
+    # gate and drop ~98% of variants with ERRCODE=VIF_TOO_HIGH while still
+    # producing a file that looked fine.
+    pidx="$(col_idx "$f" P)"
+    if [ -n "$pidx" ]; then
+        awk -F'\t' -v i="$pidx" '
+            NR>1 { n++; if ($i != "NA" && $i != "") ok++ }
+            END {
+                if (n == 0) exit 0
+                exit (ok * 2 >= n) ? 0 : 1
+            }' "$f" ||
+          add_err "$base: fewer than half the variants produced a P value ($(
+              awk -F'\t' -v i="$pidx" 'NR>1{n++; if($i!="NA"&&$i!="")ok++} END{print ok"/"n}' "$f"
+          )); check the ERRCODE column"
+    fi
 
     if [ "$SC_MODEL" = "lmm_gallop" ]; then
       # GALLOP reuses the *_INT columns for the SNP x TIME slope term -- that is

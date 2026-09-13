@@ -54,8 +54,45 @@ process GWASGLM {
 
     # Build plink2 command with optional interaction parameters
     if [ -n "${params.covar_interact}" ]; then
-        # With interaction: test SNP main effect and SNP*covariate interaction
-        INTERACTION_IDX=\$((N_COVAR + 2))
+        # With interaction: test SNP main effect and SNP*covariate interaction.
+        #
+        # plink2 numbers --glm predictors as:
+        #   1                      ADD (the genotype)
+        #   2 .. N_COVAR+1         the covariates
+        #   N_COVAR+2 .. 2*N_COVAR+1  the ADDxcovariate interaction terms
+        #
+        # Crucially, the covariates are ordered by their COLUMN ORDER IN THE
+        # COVARIATE FILE, not by the order given to --covar-name. So the index of
+        # the ADDx<covar_interact> term depends on where that covariate sits in
+        # the file, and hardcoding N_COVAR+2 silently selects the interaction
+        # with whichever covariate happens to come first.
+        INTERACT_RANK=\$(awk -F'\t' -v names="\${COVAR_NAMES}" -v target="${params.covar_interact}" '
+            NR==1 {
+                n = split(names, want, ",")
+                for (j = 1; j <= n; j++) sel[want[j]] = 1
+                k = 0
+                for (i = 1; i <= NF; i++) {
+                    if (\$i in sel) {
+                        k++
+                        if (\$i == target) { print k; exit 0 }
+                    }
+                }
+                exit 1
+            }' "${samplelist}")
+
+        if [ -z "\${INTERACT_RANK}" ]; then
+            echo "ERROR: interaction covariate '${params.covar_interact}' is not among the model covariates (\${COVAR_NAMES}) in ${samplelist}" >&2
+            exit 1
+        fi
+
+        # Index of ADDx<covar_interact> in plink2's ORIGINAL numbering.
+        INTERACTION_IDX=\$((N_COVAR + 1 + INTERACT_RANK))
+        # --tests indices refer to positions AFTER --parameters filtering, where
+        # the retained terms are ADD (1), the N_COVAR covariates (2..N_COVAR+1)
+        # and the single interaction term (N_COVAR+2).
+        TEST_IDX=\$((N_COVAR + 2))
+        echo "Interaction covariate '${params.covar_interact}' is covariate #\${INTERACT_RANK} in file order -> parameter \${INTERACTION_IDX}"
+
         plink2 --pfile ${pfile_base} \
                 --glm interaction omit-ref cols=+beta,+a1freq \
                 --pheno "${samplelist}" \
@@ -68,8 +105,8 @@ process GWASGLM {
                 --mac ${params.minor_allele_ct} \
                 --hwe ${params.hwe} \
                 --geno ${params.geno} \
-                --parameters 1-\${INTERACTION_IDX} \
-                --tests 1,\${INTERACTION_IDX} \
+                --parameters 1-\$((N_COVAR + 1)),\${INTERACTION_IDX} \
+                --tests 1,\${TEST_IDX} \
                 --threads ${task.cpus} \
                 --memory ${task.memory.toMega()} \
                 --out ${outfile}_all_vars
@@ -149,7 +186,12 @@ process GWASGLM {
         if [ -f "\${result_file}" ]; then
             new_name="\${result_file%.glm.*}.results"
             mv "\${result_file}" "\${new_name}"
-            awk 'BEGIN{OFS="\t"} NR==1{print \$0,"BETA_INT","SE_INT","P_INT","CORR_INT","P_2DF","INTERACTION","MODEL"; next} {print \$0,"NA","NA","NA","NA","NA","NA","GLM"}' "\${new_name}" > "\${new_name}.tmp" && mv "\${new_name}.tmp" "\${new_name}"
+            # In the interaction branch the awk above already appended the
+            # BETA_INT..MODEL block, so only pad here when it did not run --
+            # otherwise those seven columns end up in the file twice.
+            if [ -z "${params.covar_interact}" ]; then
+                awk 'BEGIN{OFS="\t"} NR==1{print \$0,"BETA_INT","SE_INT","P_INT","CORR_INT","P_2DF","INTERACTION","MODEL"; next} {print \$0,"NA","NA","NA","NA","NA","NA","GLM"}' "\${new_name}" > "\${new_name}.tmp" && mv "\${new_name}.tmp" "\${new_name}"
+            fi
 
             # Extract phenotype name from filename
             # Pattern: pop_studyarm_fileTag.phenotype.results

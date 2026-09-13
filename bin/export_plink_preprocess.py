@@ -9,6 +9,8 @@ import numpy as np
 import sys
 import argparse
 
+from sample_ids import normalize_sample_ids
+
 
 def main():
     parser = argparse.ArgumentParser(description='Preprocess phenotype and covariate data')
@@ -49,11 +51,9 @@ def main():
         d_pheno = pd.read_csv(args.phenofile, sep=pheno_delim, engine='c')
         d_sample = pd.read_csv(args.samplelist, sep="\t", engine='c')
 
-        # Normalize IID column name
-        if '#IID' in d_pheno.columns and 'IID' not in d_pheno.columns:
-            d_pheno.rename(columns={'#IID': 'IID'}, inplace=True)
-        if '#IID' in d_sample.columns and 'IID' not in d_sample.columns:
-            d_sample.rename(columns={'#IID': 'IID'}, inplace=True)
+        # Key on IID and discard any family-ID column; see bin/sample_ids.py.
+        d_pheno = normalize_sample_ids(d_pheno, source=args.phenofile)
+        d_sample = normalize_sample_ids(d_sample, source=args.samplelist)
 
         # Drop columns from d_sample that already exist in d_pheno (d_pheno takes precedence,
         # as it may contain time-varying variables that differ from the static covariate file)
@@ -105,11 +105,32 @@ def main():
         print("\n--- Standardizing numeric covariates ---")
         for col in covar_num:
             if col in d_set.columns:
-                # Skip interaction covariate if specified
+                # The interaction covariate is CENTERED but not scaled.
+                #
+                # Not scaling keeps the interaction coefficient in the covariate's
+                # original units (e.g. per year of age), which is the point of
+                # excluding it here. Centering is still required: plink2 --glm
+                # interaction builds an explicit SNP x covar column, and if the
+                # covariate has a large non-zero mean that column is nearly a
+                # multiple of the SNP column. The resulting collinearity trips
+                # plink2's variance-inflation gate (default --vif 50) and every
+                # affected variant is dropped with ERRCODE=VIF_TOO_HIGH rather
+                # than analysed -- on the bundled test data, an uncentered
+                # age_at_baseline (mean 72.9) lost 1525 of 1558 variants.
+                #
+                # Centering leaves the interaction estimate unchanged and merely
+                # redefines the SNP main effect as the effect at the mean
+                # covariate value, which is the usual parameterisation anyway.
                 if interact_covar and col == interact_covar:
-                    print(f"Keeping '{col}' on original scale for interaction interpretation")
+                    if pd.api.types.is_numeric_dtype(d_set[col]):
+                        covar_mean = d_set[col].mean()
+                        d_set[col] = d_set[col] - covar_mean
+                        print(f"Centered interaction covariate '{col}' (mean={covar_mean:.3f}); "
+                              "kept on original scale for interaction interpretation")
+                    else:
+                        print(f"Keeping '{col}' on original scale for interaction interpretation")
                     continue
-                
+
                 # Check if numeric
                 if pd.api.types.is_numeric_dtype(d_set[col]):
                     unique_vals = d_set[col].dropna().unique()

@@ -141,6 +141,36 @@ For Batch jobs on a plain (non-VWB) GCP project, you may use `-profile gcb_gcp` 
 
 For other example scripts and detailed information on parameter specification and .YML file settings, please consult the `./docs/tmp_docs.md` (work in progress).
 
+### Sample identifiers in phenotype and covariate files
+
+Phenotype and covariate files are keyed on **IID alone**. The identifier column
+may be spelled `IID` or `#IID`. A family-ID column (`FID` or `#FID`) is accepted
+but ignored — it is dropped on read, so these two headers behave identically:
+
+```
+#FID    IID    SEX    study_arm  ...
+IID     SEX    study_arm  ...
+```
+
+IIDs must therefore be unique across the whole cohort. If no identifier column is
+present the run fails immediately with an error naming the columns it did find.
+
+This applies only to phenotype and covariate files. Genotype files are separate:
+a PLINK1 `.fam` always carries an FID and a `.psam` may, and genetic QC
+normalises those to IID-only itself (`bin/normalize_psam_iid_only.sh`), failing
+if dropping FID would make IIDs ambiguous.
+
+### Running the smoke test
+
+`tests/smoke_test.sh` exercises the pipeline end to end over the bundled example
+data across input formats, models, interaction settings and sample-ID shapes.
+See `tests/README.md` for the matrix and what it asserts.
+
+```bash
+tests/smoke_test.sh --list     # show the scenarios
+tests/smoke_test.sh            # run them all (~15 min)
+```
+
 ## Graphic Overview
 
 ```mermaid

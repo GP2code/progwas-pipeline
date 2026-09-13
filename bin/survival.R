@@ -61,9 +61,23 @@ data.pheno = read.table(opt[['pheno-file']], header=TRUE, comment.char='')
 data.covar = read.table(opt[['covar-file']], header=TRUE, comment.char='')
 
 # Normalize PLINK-style #IID/#FID headers: read.table sanitizes '#' -> 'X.'
+#
+# Samples are keyed on IID alone, so any family-ID column is dropped here --
+# "#FID IID ..." and "IID ..." inputs must behave identically. See
+# bin/sample_ids.py for the Python counterpart and the rationale.
 fix_plink_headers <- function(df) {
   names(df) <- sub('^X\\.IID$', 'IID', names(df))
   names(df) <- sub('^X\\.FID$', 'FID', names(df))
+  if (!('IID' %in% names(df))) {
+    stop(paste0("'IID' column not found. Found columns: ",
+                paste(names(df), collapse=', '),
+                ". Phenotype and covariate files must have an 'IID' (or '#IID') column."))
+  }
+  if ('FID' %in% names(df)) {
+    message("Ignoring family-ID column FID; samples are matched on IID only.")
+    df <- df[, names(df) != 'FID', drop=FALSE]
+  }
+  df$IID <- trimws(as.character(df$IID))
   df
 }
 data.pheno <- fix_plink_headers(data.pheno)

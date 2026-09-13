@@ -16,6 +16,8 @@ matplotlib.use('Agg')  # Non-interactive backend for server environments
 import matplotlib.pyplot as plt
 from lifelines import KaplanMeierFitter
 
+from sample_ids import normalize_sample_ids
+
 def main():
     parser = argparse.ArgumentParser(
         description='Generate Table 1 and Kaplan-Meier plots for GWAS analyses'
@@ -56,12 +58,14 @@ def main():
     with open(covarfile, 'r') as f:
         cov_delim = '\t' if '\t' in f.readline() else ','
     cov = pd.read_csv(covarfile, sep=cov_delim)
+    cov = normalize_sample_ids(cov, source=covarfile)
     print(f"Covariates shape: {cov.shape}")
 
     print(f"Reading phenotype file: {phenofile}")
     with open(phenofile, 'r') as f:
         pheno_delim = '\t' if '\t' in f.readline() else ','
     pheno = pd.read_csv(phenofile, sep=pheno_delim)
+    pheno = normalize_sample_ids(pheno, source=phenofile)
     print(f"Phenotype shape: {pheno.shape}")
     print(f"Phenotype column: {pheno_name}")
     print()
