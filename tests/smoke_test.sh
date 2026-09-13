@@ -10,7 +10,7 @@
 #
 # Usage:
 #   tests/smoke_test.sh                        # all 7 scenarios
-#   tests/smoke_test.sh --only vcf_glm,plink_gallop
+#   tests/smoke_test.sh --only vcf_glm,plink_fid_gallop
 #   tests/smoke_test.sh --list
 #   tests/smoke_test.sh --dry-run
 #
@@ -39,6 +39,7 @@ ONLY=""
 PROFILE="standard"
 CONTAINER=""
 OUTDIR=""
+CUSTOM_OUTDIR=0
 KEEP=0
 DRY_RUN=0
 LIST_ONLY=0
@@ -48,7 +49,7 @@ while [ $# -gt 0 ]; do
     --only)      ONLY="$2"; shift 2 ;;
     --profile)   PROFILE="$2"; shift 2 ;;
     --container) CONTAINER="$2"; shift 2 ;;
-    --outdir)    OUTDIR="$2"; shift 2 ;;
+    --outdir)    OUTDIR="$2"; CUSTOM_OUTDIR=1; shift 2 ;;
     --keep)      KEEP=1; shift ;;
     --list)      LIST_ONLY=1; shift ;;
     --dry-run)   DRY_RUN=1; shift ;;
@@ -551,8 +552,12 @@ echo "artifacts: $OUTDIR"
 echo "======================================================"
 
 if [ "$FAIL" -eq 0 ] && [ "$KEEP" -eq 0 ]; then
-  echo "(removing $OUTDIR -- pass --keep to retain it)"
-  rm -rf "$OUTDIR"
+  if [ "$CUSTOM_OUTDIR" -eq 1 ]; then
+    echo "(custom --outdir specified: retaining $OUTDIR)"
+  else
+    echo "(removing auto-generated $OUTDIR -- pass --keep to retain it)"
+    rm -rf "$OUTDIR"
+  fi
 fi
 
 [ "$FAIL" -eq 0 ] || exit 1
