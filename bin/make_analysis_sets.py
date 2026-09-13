@@ -9,20 +9,14 @@ import sys
 import time
 import re
 
+from sample_ids import normalize_sample_ids
+
+
 def normalize_to_iid_only(df):
     """
     Normalize table to IID-based format by removing FID/#FID and ensuring IID column name.
     """
-    out = df.copy(deep=True)
-
-    if '#IID' in out.columns and 'IID' not in out.columns:
-        out.rename(columns={'#IID': 'IID'}, inplace=True)
-
-    if 'IID' not in out.columns:
-        raise ValueError("IID column is required in covariates file.")
-
-    out.drop(columns=[c for c in ['#FID', 'FID'] if c in out.columns], inplace=True)
-    return out
+    return normalize_sample_ids(df, source='covariates file')
 
 def validate_column_names(df):
     """

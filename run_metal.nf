@@ -152,7 +152,7 @@ METAL_EOF
 
     cat >> ${prefix}_metal_script.txt << METAL_EOF
   OUTFILE ${prefix} .TBL
-ANALYZE HETEROGENEITY
+ANALYZE RANDOM
 QUIT
 METAL_EOF
 

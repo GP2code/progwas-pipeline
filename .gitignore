@@ -166,3 +166,13 @@ proj*/
 
 # Example param YAMLs are tracked despite the test*/params_*.yml rules above.
 !example/params_YML/*.yml
+
+# The tests/ directory is tracked despite the broad test* rule above.
+!tests/
+!tests/**
+
+# Smoke test artifacts (tests/smoke_test.sh)
+.smoke_test/
+
+# Claude AI worktree
+.claude/

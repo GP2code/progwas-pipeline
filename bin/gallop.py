@@ -19,6 +19,8 @@ import argparse
 import sys
 import os
 
+from sample_ids import normalize_sample_ids
+
 try:
   import datatable
 except ImportError:
@@ -531,15 +533,9 @@ def load(fn, hdf_key=None):
   else:
     raise Exception("Unknown extension for phenotype")
 
-  # normalize #IID / #FID headers (pandas keeps '#' literally unlike R)
-  df = df.rename(columns={'#IID': 'IID', '#FID': 'FID'})
-  if 'IID' not in df.columns:
-    raise ValueError(
-        f"'IID' column not found in {fn}. "
-        f"Found columns: {list(df.columns)}. "
-        "Both files require an 'IID' column (or '#IID', which is also accepted).")
-  df['IID'] = df['IID'].astype(str)
-  return df
+  # Key on IID and discard any family-ID column; see bin/sample_ids.py.
+  # (pandas keeps '#' literally in headers, unlike R.)
+  return normalize_sample_ids(df, source=fn, copy=False)
 
 
 def main():
