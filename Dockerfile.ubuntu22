@@ -129,20 +129,16 @@ RUN cd /tmp/bcftools-${BCFTOOLS_VERSION} && \
     rm -rf /tmp/bcftools-${BCFTOOLS_VERSION}
 
 # ============================================
-# METAL - compile from source
+# random-metal - compile from source
 # ============================================
 
-ENV METAL_VERSION=2020-05-05
-
-# Download METAL from stable source (pre-compiled binary)
-RUN wget -q http://csg.sph.umich.edu/abecasis/Metal/download/Linux-metal.tar.gz -O /tmp/metal.tar.gz && \
-    tar xzf /tmp/metal.tar.gz -C /tmp && \
-    rm /tmp/metal.tar.gz
-
-# Install METAL binary
-RUN find /tmp -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
+RUN git clone https://github.com/explodecomputer/random-metal.git /tmp/random-metal && \
+    cd /tmp/random-metal && \
+    make && \
+    find /tmp/random-metal -name "metal" -type f -executable -exec cp {} /usr/local/bin/metal \; && \
     chmod +x /usr/local/bin/metal && \
-    rm -rf /tmp/generic-metal
+    ln -sf /usr/local/bin/metal /usr/local/bin/random-metal && \
+    rm -rf /tmp/random-metal
 
 # ============================================
 # UCSC liftOver - for coordinate conversions
