@@ -173,3 +173,6 @@ proj*/
 
 # Smoke test artifacts (tests/smoke_test.sh)
 .smoke_test/
+
+# Claude AI worktree
+.claude/
