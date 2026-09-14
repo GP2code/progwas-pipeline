@@ -1,4 +1,4 @@
-# Dockerfile for long-GWAS pipeline - Ubuntu 22.04
+# Dockerfile for proGWAS pipeline - Ubuntu 22.04
 # Simplified modern version with Python 3.10 and R 4.x
 
 FROM ubuntu:22.04

@@ -17,7 +17,7 @@
 #   -v "$PWD/References:/workspace/References" \
 #   -e RESOURCE_DIR=/workspace/References \
 #   -w /workspace \
-#   longgwas:slim bash -c "cd test_output && bash ../bin/process1.sh 2 ../example/genotype/chr21.vcf -9 hg19 chr21_test 2>&1 | tee process1.log"
+#   ghcr.io/gp2code/progwas-pipeline:slim bash -c "cd test_output && bash ../bin/process1.sh 2 ../example/genotype/chr21.vcf -9 hg19 chr21_test 2>&1 | tee process1.log"
 
 
 # Parameters

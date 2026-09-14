@@ -13,7 +13,7 @@ No additional setup required! The workflow uses `GITHUB_TOKEN` which is automati
 After the first build, you may want to make the image public:
 
 1. Go to your GitHub profile → **Packages**
-2. Find the `long-gwas-pipeline` package
+2. Find the `progwas-pipeline` package
 3. Click **Package settings**
 4. Scroll to **Danger Zone**
 5. Click **Change visibility** → **Public**

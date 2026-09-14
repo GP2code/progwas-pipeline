@@ -154,7 +154,7 @@ Now you can customize `params.yml` with your own input files and parameters. see
 
 ```bash
 # Build local Docker image first
-docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t longgwas-local-test .
+docker build --platform linux/amd64 -f Dockerfile.ubuntu22 -t progwas-local-test .
 # Run with localtest profile
 nextflow run main.nf -profile localtest -params-file example/params_YML/test_survival.yml
 ```
@@ -173,7 +173,7 @@ cd ./Docker
 export NXF_SINGULARITY_CACHEDIR=/data/$USER/nxf_singularity_cache;
 export SINGULARITY_CACHEDIR=/data/$USER/.singularity;
 
-singularity build long-gwas-pipeline.sif docker://ghcr.io/gp2code/progwas-pipeline:1.0.0
+singularity build progwas-pipeline.sif docker://ghcr.io/gp2code/progwas-pipeline:1.0.0
 cd ..
 
 # Submit the slurm job from the main directory
@@ -192,7 +192,7 @@ export STORE_ROOT='gs://<your-bucket-name>'  # Bucket you created above
 export PROJECT_NAME='testrun'                # Any name for your project
 export TOWER_ACCESS_TOKEN='<your-token>'     # Get from https://cloud.seqera.io/tokens
 
-cd ~/repos/long-gwas-pipeline
+cd ~/repos/progwas-pipeline
 
 git pull origin main  # Update to latest code
 
@@ -204,7 +204,7 @@ wb nextflow run main.nf -profile gcb_vwb -params-file example/params_YML/test_su
 
 ```bash
 # Run from GitHub main branch
-nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file myparams.yml
+nextflow run GP2code/progwas-pipeline -r main -profile standard -params-file myparams.yml
 
 ```
 
@@ -319,7 +319,7 @@ If omitted, all samples are analyzed together as a single group.
 
 ### METAL Meta-analysis (Standalone)
 
-Use `run_metal.nf` when you already have long-gwas-outputs that you want meta-analysis.
+Use `run_metal.nf` when you already have progwas GWAS outputs that you want meta-analysis.
 
 Expected input columns (tab-delimited): `ID(chr:pos:ref:alt)`, `REF`, `ALT`, `A1`, `BETA`, `SE`, `P`, `OBS_CT`, `A1_FREQ`. `GWASGLM`, `GWASCPH`, and `GWASGALLOP` all share this schema for their main term.
 

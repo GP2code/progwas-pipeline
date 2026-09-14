@@ -17,7 +17,7 @@ Although you can install Workbench CLI on your local machine, you can only acces
     - Description: "Bucket for Nextflow run logs and output"
   - `+ Data from catalog` → GP2 tier 2 data (if needed)
 - Create App instance to run Nextflow:
-  - `+ Add repository` → longgwas repository (`https://github.com/hirotaka-i/progwas-pipeline.git`)
+  - `+ Add repository` → progwas-pipeline repository (`https://github.com/GP2code/progwas-pipeline.git`)
   - `+ New app instance` → Jupyter Lab (default settings)
 
 ## Running on VWB
@@ -104,11 +104,11 @@ wb resource create gcs-bucket --id=nf_files \
   --description="Bucket for Nextflow run logs and output"
 ```
 
-### Add the longgwas repository
+### Add the progwas-pipeline repository
 ```bash
 wb resource add-ref git-repo \
-  --id=longgwas \
-  --repo-url=https://github.com/hirotaka-i/long-gwas-pipeline.git
+  --id=progwas-pipeline \
+  --repo-url=https://github.com/GP2code/progwas-pipeline.git
 
 # Check resources
 wb resource list

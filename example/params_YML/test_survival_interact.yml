@@ -1,5 +1,5 @@
 # Example parameters for test dataset (chromosomes 20-22)
-# Usage: nextflow run hirotaka-i/long-gwas-pipeline -r main -profile standard -params-file example/params_YML/test_survival_interact.yml
+# Usage: nextflow run main.nf -profile standard -params-file example/params_YML/test_survival_interact.yml
 
 # Input files - using example data
 # Note: Use ${projectDir} or absolute paths when running from GitHub

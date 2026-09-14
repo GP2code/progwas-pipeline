@@ -60,7 +60,7 @@ For a detailed guide and instructions for Verily Workbench set up, please consul
 ### 2. Clone Repository
 
 ```bash
-git clone https://github.com/hirotaka-i/progwas-pipeline.git
+git clone https://github.com/GP2code/progwas-pipeline.git
 cd progwas-pipeline
 # Update to latest code if needed
 git pull origin main  
@@ -94,9 +94,9 @@ Create a file with necessary environment variables, which should be loaded befor
 ```bash
 cat > ~/.env << 'EOF'
 export NXF_SYNTAX_PARSER=v1
-export STORE_ROOT='~/longGWAS/test_run' # replace with project directory
+export STORE_ROOT='~/progwas/test_run' # replace with project directory
 export PROJECT_NAME='my_analysis' # name of folder where results are stored (i.e. STORE_ROOT/PROJECT_NAME/)
-export REFERENCE_DIR='~/longGWAS/progwas-pipeline-dev/References' # where References are stored
+export REFERENCE_DIR='~/progwas/progwas-pipeline/References' # where References are stored
 EOF
 ```
 
@@ -116,7 +116,7 @@ To run an example **cross-sectional GLM** locally:
 ```bash
 source ~/.env
 
-cd ~/longGWAS/progwas-pipeline-dev
+cd ~/progwas/progwas-pipeline
 
 nextflow -log LOG_$(date +%Y%m%d_%H%M%S).log run main.nf \
   -profile standard \
@@ -234,5 +234,5 @@ graph TD
 ## Support
 
 For issues and questions:
-- 🐛 **Bug reports**: [GitHub Issues](https://github.com/hirotaka-i/long-gwas-pipeline/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/hirotaka-i/long-gwas-pipeline/discussions)
+- 🐛 **Bug reports**: [GitHub Issues](https://github.com/GP2code/progwas-pipeline/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/GP2code/progwas-pipeline/discussions)

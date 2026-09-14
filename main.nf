@@ -142,7 +142,7 @@ else {
 }
 
 log.info """\
- LONG-GWAS - GWAS P I P E L I N E
+ PROGWAS - GWAS P I P E L I N E
  ======================================
  Chunk size for genetic processing        : ${params.chunk_size}
  Kinship matrix threshold                 : ${params.kinship}
