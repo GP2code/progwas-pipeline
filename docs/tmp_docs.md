@@ -70,8 +70,13 @@ The pipeline has pre-defined profiles for different execution environments. You 
 - `biowulf`: Biowulf cluster execution with Singularity
 - `biowulflocal`: Biowulf local execution without job submission
 - `gcb_vwb`: Google Cloud Batch execution for Verily Workbench. `maxForks` for high-fan-out processes scale from `gcb_ssd_quota_gb` and `gcb_cpu_quota` (default 500 GB / 200 CPU baseline).
+- `gcb_gcp`: Google Cloud Batch execution in a plain GCP project. It inherits the process resources from `gcb_vwb`, uses the default project network, and defaults to public task addresses.
 
 These profiles can be customized in [conf/profiles/](conf/profiles/) folder.
+
+**Google Cloud Batch profile layout:** `gcb_vwb.config` is the shared resource profile. Keep CPU, memory, disk, and `maxForks` changes there so `gcb_vwb` and `gcb_gcp` remain aligned. `gcb_gcp.config` only supplies its environment-specific Google Batch settings and includes `gcb_vwb.config`.
+
+For `gcb_gcp`, set `gcb_ssd_quota_gb` and `gcb_cpu_quota` to the selected region's actual quotas. Its `params {}` block must stay above `includeConfig 'gcb_vwb.config'`: the inherited configuration calculates `gcbScale` while it is parsed, so quota values declared below the include are silently ignored. The configured GCP region, quota values, and any permitted zones should describe the same target region.
 
 
 ### Output Directory Structure
