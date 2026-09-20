@@ -190,6 +190,36 @@ pheno_sd <- function(df, ycol, num_covs = character(0), cat_covs = character(0),
 }
 
 # ==============================================================================
+# Repeated measures
+# ==============================================================================
+
+# One-way random-effects ICC by explicit sums of squares. Equivalent to
+# aov(y ~ id) but O(n) with no model matrix, so it scales to cohort size.
+# Repeat visits on one subject are correlated, so k visits are worth less than
+# k independent observations; rho quantifies how much less.
+icc_oneway <- function(y, id) {
+  ok <- !is.na(y) & !is.na(id)
+  y <- as.numeric(y[ok]); id <- factor(as.character(id[ok]))
+  ni <- as.numeric(table(id)); N <- length(ni); n <- length(y)
+  if (N < 2L || n <= N) {
+    return(list(icc = NA_real_, k_mean = if (N) n / N else NA_real_, N = N, n_obs = n,
+                var_between = NA_real_, var_within = NA_real_, sd_total = NA_real_,
+                note = "no within-subject replication; ICC not estimable"))
+  }
+  mi <- tapply(y, id, mean)
+  MSB <- sum(ni * (mi - mean(y))^2) / (N - 1)
+  MSW <- sum((y - mi[as.character(id)])^2) / (n - N)
+  k0 <- (n - sum(ni^2) / n) / (N - 1)            # Satterthwaite; equals k when balanced
+  s2b <- max(0, (MSB - MSW) / k0)
+  list(icc = s2b / (s2b + MSW), var_between = s2b, var_within = MSW,
+       k_mean = n / N, k0 = k0, N = N, n_obs = n, sd_total = sqrt(s2b + MSW),
+       note = if (s2b == 0) "ICC truncated at 0 (MSB < MSW)" else "")
+}
+
+# Effective sample size for repeated measures: the design-effect deflation of N*k.
+n_info_lmm <- function(N, k, rho) N * k / (1 + (k - 1) * rho)
+
+# ==============================================================================
 # Output writers
 #
 # Three artefacts per run: the headline results table, an extended-info table

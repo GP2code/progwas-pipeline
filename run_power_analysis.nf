@@ -33,6 +33,13 @@ nextflow.enable.dsl = 2
  *   --power_maf_grid     MAF grid for the MDE columns (default: "0.01 0.05 0.10 0.20 0.50")
  *   --power_info         Imputation r2 applied to Var(G) (default: 1.0)
  *   --power_n_grid       Planning mode: sample sizes to evaluate, e.g. "500 1000 5000"
+ *   --power_icc          LMM: intraclass correlation; estimated from data if omitted,
+ *                        required in planning mode
+ *   --power_visits       LMM planning: mean measurements per subject (k)
+ *   --power_event_rate   CoxPH planning: fraction with an event, so D = N * rate.
+ *                        Without it, --power_n_grid is read as event counts
+ *   --power_event_col    CoxPH: 0/1 event indicator column; defaults to pheno_name
+ *   --power_slope_term   LMM: also report the SNPxtime slope bound (default: true)
  *   --power_sd_pheno     Measured phenotype SD; overrides the computed value
  *   --power_rank_int     Phenotype was rank-INT transformed (default: false)
  *   --power_residualize  Take the SD after regressing out covariates (default: true)
@@ -52,6 +59,11 @@ params.power_maf_grid = params.containsKey('power_maf_grid') ? params.power_maf_
 params.power_info     = params.containsKey('power_info')     ? params.power_info     : 1.0
 params.power_sd_pheno = params.containsKey('power_sd_pheno') ? params.power_sd_pheno : null
 params.power_n_grid   = params.containsKey('power_n_grid')   ? params.power_n_grid   : null
+params.power_icc        = params.containsKey('power_icc')        ? params.power_icc        : null
+params.power_visits     = params.containsKey('power_visits')     ? params.power_visits     : null
+params.power_event_rate = params.containsKey('power_event_rate') ? params.power_event_rate : null
+params.power_event_col  = params.containsKey('power_event_col')  ? params.power_event_col  : null
+params.power_slope_term = params.containsKey('power_slope_term') ? params.power_slope_term : true
 params.power_rank_int    = params.containsKey('power_rank_int')    ? params.power_rank_int    : false
 params.power_residualize = params.containsKey('power_residualize') ? params.power_residualize : true
 params.power_per_arm     = params.containsKey('power_per_arm')     ? params.power_per_arm     : true
@@ -122,16 +134,9 @@ if (params.linear_flag)       designs << 'glm'
 if (params.longitudinal_flag) designs << 'lmm'
 if (params.survival_flag)     designs << 'cph'
 if (!designs) {
-    error("Set at least one analysis flag: --linear_flag (GLM). " +
-          "Longitudinal (LMM) and survival (CoxPH) power are not implemented yet.")
+    error("Set at least one analysis flag: --linear_flag (GLM), --longitudinal_flag (LMM) " +
+          "or --survival_flag (CoxPH).")
 }
-def unsupported = designs - ['glm']
-if (unsupported) {
-    error("Power analysis is only implemented for GLM (--linear_flag) so far; requested " +
-          "${unsupported.join(', ')}.\nN_info differs by design -- N for GLM, N*k/(1+(k-1)*rho) " +
-          "for LMM, and events D for CoxPH -- so the GLM numbers must not be reused for them.")
-}
-
 def phenoNames = planningMode ? ['planned'] : parsePhenoNames(params.pheno_name)
 def phenoDelim  = planningMode ? '\t' : detectDelimiter(params.phenofile)
 def phenoHeader = planningMode ? ([] as Set) : readHeaderColumns(params.phenofile, '--phenofile')
@@ -156,12 +161,22 @@ numericList.each { col ->
 if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
     missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
 }
-// A binary phenotype needs N_info = n1*n2/(n1+n2), not N, so reject it here.
+if ('lmm' in designs && !(params.time_col in phenoHeader)) {
+    missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns (required for LMM)"
+}
+// GLM/LMM need a quantitative phenotype; CoxPH needs a 0/1 event indicator.
 phenoNames.each { col ->
-    if (col in phenoHeader && countNonBinaryValues(params.phenofile, col, phenoDelim) == 0) {
-        missingColumns << ("--pheno_name '${col}' looks binary (only 0/1 values); binary/logistic " +
-                           "power is not supported, since N_info for a case/control contrast is " +
-                           "n1*n2/(n1+n2), not N")
+    if (col in phenoHeader) {
+        def isBinary = countNonBinaryValues(params.phenofile, col, phenoDelim) == 0
+        if (isBinary && (('glm' in designs) || ('lmm' in designs))) {
+            missingColumns << ("--pheno_name '${col}' looks binary (only 0/1 values); binary/logistic " +
+                               "power is not supported, since N_info for a case/control contrast is " +
+                               "n1*n2/(n1+n2), not N")
+        }
+        if (!isBinary && 'cph' in designs && !params.power_event_col) {
+            missingColumns << ("--pheno_name '${col}' is not 0/1, but CoxPH needs an event indicator; " +
+                               "set --power_event_col to the 0/1 column")
+        }
     }
 }
 }
@@ -196,17 +211,36 @@ log.info """\
  """
 
 /*
- * Process: GLM power analysis, one task per phenotype.
+ * One process per design. They differ only in the script called and the
+ * design-specific flags; N_info is what actually separates them.
  */
+def commonOpts = { pheno ->
+    """--pheno-name '${pheno}' \\
+        --study-arm-col '${params.study_arm_col ?: ''}' \\
+        --covar-numeric '${params.covar_numeric ?: ''}' \\
+        --covar-categorical '${params.covar_categorical ?: ''}'"""
+}
+def sharedOpts = {
+    def sd = params.power_sd_pheno ? "--sd-pheno ${params.power_sd_pheno}" : ''
+    def rank = params.power_rank_int ? '--rank-int' : ''
+    """--maf-grid '${mafGrid}' \\
+        --minor-allele-freq ${params.minor_allele_freq} \\
+        --minor-allele-ct ${params.minor_allele_ct} \\
+        --alpha ${params.power_alpha} \\
+        --target-power ${params.power_target} \\
+        --info ${params.power_info} \\
+        --residualize ${params.power_residualize} \\
+        --per-arm ${params.power_per_arm} \\
+        ${sd} ${rank}"""
+}
+
 process POWER_GLM {
     tag "${pheno}"
     label 'small'
-    // conf/base.config retries twice by default, which would bury a deterministic argument error.
     errorStrategy 'terminate'
 
     publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
                overwrite: true, pattern: "*_power_{results,extended_info}.tsv"
-    // Column glossaries: identical across phenotypes, so they simply overwrite.
     publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
                overwrite: true, pattern: "{power_results,extended_info}_key.tsv"
     publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
@@ -226,26 +260,92 @@ process POWER_GLM {
       path "${params.power_prefix}_${pheno}_provenance.txt",          emit: provenance
 
     script:
-      def sdOpt = params.power_sd_pheno ? "--sd-pheno ${params.power_sd_pheno}" : ''
-      def rankOpt = params.power_rank_int ? '--rank-int' : ''
-      def dataOpts = planningMode ? "--n-grid '${nGrid}'" : """--pheno-file ${phenofile} \\
-        --covar-file ${covarfile} \\
-        --pheno-name '${pheno}' \\
-        --study-arm-col '${params.study_arm_col ?: ''}' \\
-        --covar-numeric '${params.covar_numeric ?: ''}' \\
-        --covar-categorical '${params.covar_categorical ?: ''}'"""
+      def dataOpts = planningMode ? "--n-grid '${nGrid}'"
+                                  : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_glm.R \\
         ${dataOpts} \\
-        --maf-grid '${mafGrid}' \\
-        --minor-allele-freq ${params.minor_allele_freq} \\
-        --minor-allele-ct ${params.minor_allele_ct} \\
-        --alpha ${params.power_alpha} \\
-        --target-power ${params.power_target} \\
-        --info ${params.power_info} \\
-        --residualize ${params.power_residualize} \\
-        --per-arm ${params.power_per_arm} \\
-        ${sdOpt} ${rankOpt} \\
+        ${sharedOpts()} \\
+        --out-prefix ${params.power_prefix}_${pheno}
+      """
+}
+
+process POWER_LMM {
+    tag "${pheno}"
+    label 'small'
+    errorStrategy 'terminate'
+
+    publishDir "${params.power_outdir}/lmm_gallop/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_{results,extended_info}.tsv"
+    publishDir "${params.power_outdir}/lmm_gallop/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "{power_results,extended_info}_key.tsv"
+    publishDir "${params.power_outdir}/lmm_gallop/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_curve.png"
+    publishDir "${params.power_outdir}/lmm_gallop/${params.power_prefix}/provenance", mode: 'copy',
+               overwrite: true, pattern: "*_provenance.txt"
+
+    input:
+      tuple val(pheno), path(phenofile), path(covarfile)
+
+    output:
+      path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
+      path "${params.power_prefix}_${pheno}_power_extended_info.tsv", emit: extended
+      path "power_results_key.tsv",                                   emit: results_key
+      path "extended_info_key.tsv",                                   emit: extended_key
+      path "${params.power_prefix}_${pheno}_power_curve.png",         emit: plot, optional: true
+      path "${params.power_prefix}_${pheno}_provenance.txt",          emit: provenance
+
+    script:
+      def iccOpt = params.power_icc != null ? "--icc ${params.power_icc}" : ''
+      def visitsOpt = params.power_visits != null ? "--visits ${params.power_visits}" : ''
+      def dataOpts = planningMode
+          ? "--n-grid '${nGrid}' ${visitsOpt}"
+          : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        --time-col '${params.time_col}' \\\n        ${commonOpts(pheno)}"
+      """
+      power_analysis_lmm.R \\
+        ${dataOpts} \\
+        ${iccOpt} \\
+        --slope-term ${params.power_slope_term} \\
+        ${sharedOpts()} \\
+        --out-prefix ${params.power_prefix}_${pheno}
+      """
+}
+
+process POWER_CPH {
+    tag "${pheno}"
+    label 'small'
+    errorStrategy 'terminate'
+
+    publishDir "${params.power_outdir}/cph/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_{results,extended_info}.tsv"
+    publishDir "${params.power_outdir}/cph/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "{power_results,extended_info}_key.tsv"
+    publishDir "${params.power_outdir}/cph/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_curve.png"
+    publishDir "${params.power_outdir}/cph/${params.power_prefix}/provenance", mode: 'copy',
+               overwrite: true, pattern: "*_provenance.txt"
+
+    input:
+      tuple val(pheno), path(phenofile), path(covarfile)
+
+    output:
+      path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
+      path "${params.power_prefix}_${pheno}_power_extended_info.tsv", emit: extended
+      path "power_results_key.tsv",                                   emit: results_key
+      path "extended_info_key.tsv",                                   emit: extended_key
+      path "${params.power_prefix}_${pheno}_power_curve.png",         emit: plot, optional: true
+      path "${params.power_prefix}_${pheno}_provenance.txt",          emit: provenance
+
+    script:
+      def rateOpt = params.power_event_rate != null ? "--event-rate ${params.power_event_rate}" : ''
+      def evOpt = params.power_event_col ? "--event-col '${params.power_event_col}'" : ''
+      def dataOpts = planningMode
+          ? "--n-grid '${nGrid}' ${rateOpt}"
+          : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
+      """
+      power_analysis_cph.R \\
+        ${dataOpts} \\
+        ${sharedOpts()} \\
         --out-prefix ${params.power_prefix}_${pheno}
       """
 }
@@ -257,9 +357,11 @@ workflow {
 
     jobs = Channel.fromList(phenoNames).map { p -> tuple(p, pheno_f, covar_f) }
 
-    POWER_GLM(jobs)
-
-    POWER_GLM.out.results.subscribe { f -> log.info " results: ${f.name}" }
+    // All requested designs run in one launch, unlike main.nf which picks exactly one:
+    // power is cheap, and the designs are directly comparable once N_info is right.
+    if ('glm' in designs) { POWER_GLM(jobs); POWER_GLM.out.results.subscribe { f -> log.info " glm:  ${f.name}" } }
+    if ('lmm' in designs) { POWER_LMM(jobs); POWER_LMM.out.results.subscribe { f -> log.info " lmm:  ${f.name}" } }
+    if ('cph' in designs) { POWER_CPH(jobs); POWER_CPH.out.results.subscribe { f -> log.info " cph:  ${f.name}" } }
 }
 
 /*
