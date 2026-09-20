@@ -2,7 +2,10 @@
 
 # Power analysis for cross-sectional quantitative GWAS (plink2 --glm), where the
 # information carried by the design is just the number of subjects: N_info = N.
-# Reads the phenotype and covariate files only; genotypes are not used.
+#
+# Two modes:
+#   data mode     reads phenotype + covariate files and reports power per study arm
+#   planning mode --n-grid "500 1000 5000" only, for sizing a study before it exists
 
 suppressPackageStartupMessages(library("optparse"))
 
@@ -20,6 +23,9 @@ power_lib_dir <- function() {
 }
 
 option_list <- list(
+  make_option(c("--n-grid"), type = "character", default = NULL,
+              help = paste("Planning mode: space-separated sample sizes to evaluate.",
+                           "No phenotype or covariate file is needed.")),
   make_option(c("--pheno-file"), type = "character", default = NULL,
               help = "Phenotype file (TSV/CSV; IID or #IID column required)"),
   make_option(c("--covar-file"), type = "character", default = NULL,
@@ -50,6 +56,8 @@ option_list <- list(
               help = "Phenotype was rank-INT transformed before GWAS, so BETA is already in SD units"),
   make_option(c("--residualize"), type = "character", default = "true",
               help = "Regress covariates out before taking the SD [default %default]"),
+  make_option(c("--plots"), type = "character", default = "true",
+              help = "Write the power-curve PNG [default %default]"),
   make_option(c("--per-arm"), type = "character", default = "true",
               help = "Also report each study arm separately [default %default]"),
   make_option(c("--out-prefix"), type = "character", default = "POWER",
@@ -74,8 +82,14 @@ source(lib)
 
 # ---- validate ---------------------------------------------------------------
 
-if (is.null(opt[["pheno-file"]]) || is.null(opt[["covar-file"]])) {
-  stop("--pheno-file and --covar-file are both required.")
+n_grid <- parse_num_list(opt[["n-grid"]], "--n-grid")
+planning_mode <- length(n_grid) > 0
+
+if (planning_mode) {
+  if (any(n_grid < 2)) stop("--n-grid values must be at least 2.")
+  n_grid <- sort(unique(round(n_grid)))
+} else if (is.null(opt[["pheno-file"]]) || is.null(opt[["covar-file"]])) {
+  stop("Supply either --n-grid (planning mode) or both --pheno-file and --covar-file.")
 }
 if (opt$alpha <= 0 || opt$alpha >= 1) stop("--alpha must be between 0 and 1.")
 if (opt[["target-power"]] <= 0 || opt[["target-power"]] >= 1) {
@@ -100,6 +114,8 @@ cat_covs <- parse_list(opt[["covar-categorical"]])
 num_covs <- num_covs[!grepl("^(?i)PC[0-9]+$", num_covs, perl = TRUE)]
 
 # ---- read -------------------------------------------------------------------
+
+if (!planning_mode) {
 
 pheno <- read_keyed_table(opt[["pheno-file"]], "pheno-file")
 covar <- read_keyed_table(opt[["covar-file"]], "covar-file")
@@ -132,6 +148,8 @@ if (n_dup > 0) {
   merged <- merged[!duplicated(merged$IID), , drop = FALSE]
 }
 
+}  # end data-mode input handling
+
 # ---- compute ----------------------------------------------------------------
 
 r_prov <- sprintf("R %s.%s base stats (qnorm/qchisq/pchisq); optparse %s. No genpwr.",
@@ -139,63 +157,90 @@ r_prov <- sprintf("R %s.%s base stats (qnorm/qchisq/pchisq); optparse %s. No gen
                   tryCatch(as.character(packageVersion("optparse")),
                            error = function(e) "unknown"))
 
-arms <- split_by_arm(merged, opt[["study-arm-col"]], per_arm)
+common <- list(
+  Phenotype = if (planning_mode) "planned" else ycol,
+  Design = "glm",
+  N_info_formula = "N",
+  Alpha = opt$alpha, Target_power = opt[["target-power"]],
+  Info_r2 = opt$info,
+  Info_source = if (opt$info == 1) "assumed 1.0 (no genotype files read)" else "user-supplied --info",
+  MAF_threshold = opt[["minor-allele-freq"]], MAC_threshold = opt[["minor-allele-ct"]],
+  Effect_scale = "SD units of phenotype per allele",
+  Model_package = "plink2 --glm (additive, 1 df)",
+  Power_packages = r_prov,
+  Power_method = "Non-centrality-parameter framework; additive coding; HWE; 1 df Wald/chi-square",
+  Method_citation = "Sham & Purcell 2014 (NCP); Nalls et al. 2019 (additive coding convention)"
+)
+
 rows <- list()
 
-for (arm in names(arms)) {
-  d <- arms[[arm]]
-  n <- length(unique(d$IID))
-  if (n < 2) {
-    warning(sprintf("Study arm '%s' has %d subject(s); skipped.", arm, n))
-    next
+if (planning_mode) {
+  for (n in n_grid) {
+    rows[[as.character(n)]] <- do.call(power_row, c(common, list(
+      Group = sprintf("N=%d", n), N_info = n, N_subjects = n,
+      N_info_basis = "planned sample size from --n-grid (hypothetical)",
+      MAF_floor = maf_floor(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
+      MAF_floor_basis = maf_floor_basis(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
+      SD_pheno = opt[["sd-pheno"]],
+      SD_source = if (is.na(opt[["sd-pheno"]])) "not available in planning mode" else "user-supplied --sd-pheno",
+      Rank_INT = opt[["rank-int"]])))
   }
-  sd_info <- pheno_sd(d, ycol, num_covs, cat_covs,
-                      rank_int = opt[["rank-int"]], override = opt[["sd-pheno"]],
-                      residualize = residualize)
-  rows[[arm]] <- power_row(
-    Phenotype = ycol, Design = "glm", Term = "main", Study_arm = arm,
-    N_subjects = n, N_obs = nrow(d),
-    N_info = n, N_info_formula = "N",
-    N_info_basis = "unique IIDs with non-missing phenotype, present in the covariate file (PRE-QC)",
-    Alpha = opt$alpha, Target_power = opt[["target-power"]],
-    Info_r2 = opt$info,
-    Info_source = if (opt$info == 1) "assumed 1.0 (no genotype files read)" else "user-supplied --info",
-    MAF_floor = maf_floor(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
-    MAF_floor_basis = maf_floor_basis(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
-    SD_pheno = sd_info$sd, SD_source = sd_info$source,
-    Rank_INT = opt[["rank-int"]], Effect_scale = "SD units of phenotype per allele",
-    Model_package = "plink2 --glm (additive, 1 df)",
-    Power_packages = r_prov,
-    Power_method = "Non-centrality-parameter framework; additive coding; HWE; 1 df Wald/chi-square",
-    Method_citation = "Sham & Purcell 2014 (NCP); Nalls et al. 2019 (additive coding convention)"
-  )
+} else {
+  arms <- split_by_arm(merged, opt[["study-arm-col"]], per_arm)
+  for (arm in names(arms)) {
+    d <- arms[[arm]]
+    n <- length(unique(d$IID))
+    if (n < 2) {
+      warning(sprintf("Study arm '%s' has %d subject(s); skipped.", arm, n))
+      next
+    }
+    sd_info <- pheno_sd(d, ycol, num_covs, cat_covs,
+                        rank_int = opt[["rank-int"]], override = opt[["sd-pheno"]],
+                        residualize = residualize)
+    rows[[arm]] <- do.call(power_row, c(common, list(
+      Group = arm, N_info = n, N_subjects = n, N_obs = nrow(d),
+      N_info_basis = "unique IIDs with non-missing phenotype, present in the covariate file (PRE-QC)",
+      MAF_floor = maf_floor(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
+      MAF_floor_basis = maf_floor_basis(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
+      SD_pheno = sd_info$sd, SD_source = sd_info$source,
+      Rank_INT = opt[["rank-int"]])))
+  }
 }
 
-if (!length(rows)) stop("No study arm had enough subjects to compute power.")
+if (!length(rows)) stop("No group had enough subjects to compute power.")
 
-paths <- write_power_tables(rows, maf_grid, opt[["out-prefix"]], hazard = FALSE)
+results_path  <- write_results_table(rows, maf_grid, opt[["out-prefix"]], hazard = FALSE)
+extended_path <- write_extended_info(rows, opt[["out-prefix"]])
+plot_path     <- if (as_flag(opt$plots, TRUE)) {
+  plot_power_curve(rows, opt[["out-prefix"]], opt$alpha, opt[["target-power"]])
+} else NULL
 
 write_provenance(
   opt[["out-prefix"]], opt,
   inputs = list(`pheno-file` = opt[["pheno-file"]], `covar-file` = opt[["covar-file"]]),
   extra = c(
+    sprintf("mode: %s", if (planning_mode) "planning (--n-grid)" else "data (phenotype + covariate files)"),
     sprintf("lambda_req(%.4g, %.3g) = %.4f", opt[["target-power"]], opt$alpha,
             lambda_req(opt[["target-power"]], opt$alpha)),
     sprintf("MAF grid: %s", paste(maf_grid, collapse = " ")),
-    sprintf("repeated IID rows dropped: %d", n_dup),
-    "N is counted from the input files (PRE-QC); the analysed N after ancestry/kinship/",
-    "missingness filtering will be lower, so these MDEs are optimistic."
+    "MDE_R2 is MAF-free (lambda_req / N_info); only MDE_beta varies across MAF.",
+    "MAC = 2 * N * MAF; Passes_QC is TRUE where MAF >= minor_allele_freq and MAC >= minor_allele_ct.",
+    if (planning_mode) "Planning mode: N values are hypothetical, not read from data."
+    else c(sprintf("repeated IID rows dropped: %d", n_dup),
+           "N is counted from the input files (PRE-QC); the analysed N after ancestry/kinship/",
+           "missingness filtering will be lower, so these MDEs are optimistic.")
   ))
 
 # ---- summary ----------------------------------------------------------------
 
-cat(sprintf("\nGLM power analysis: %s (alpha=%.3g, target power=%.2f)\n",
-            ycol, opt$alpha, opt[["target-power"]]))
-cat(sprintf("%-16s %8s %12s %14s\n", "study_arm", "N", "MDE R2 (%)", "MDE beta@0.05"))
-for (arm in names(rows)) {
-  r <- rows[[arm]]
-  cat(sprintf("%-16s %8d %12.4f %14.4f\n", arm, r$N_subjects, r$MDE_R2_pct,
+cat(sprintf("\nGLM power analysis - %s mode (alpha=%.3g, target power=%.2f)\n",
+            if (planning_mode) "planning" else "data", opt$alpha, opt[["target-power"]]))
+cat(sprintf("%-16s %9s %12s %14s\n", "group", "N_info", "MDE R2 (%)", "MDE beta@0.05"))
+for (nm in names(rows)) {
+  r <- rows[[nm]]
+  cat(sprintf("%-16s %9d %12.4f %14.4f\n", r$Group, as.integer(r$N_info), r$MDE_R2_pct,
               mde_beta(r$N_info, 0.05, r$Info_r2, r$Alpha, r$Target_power)))
 }
-cat(sprintf("\nWrote: %s\n       %s\n       %s_provenance.txt\n",
-            paths$wide, paths$long, opt[["out-prefix"]]))
+cat(sprintf("\nWrote: %s\n       %s\n", results_path, extended_path))
+if (!is.null(plot_path)) cat(sprintf("       %s\n", plot_path))
+cat(sprintf("       %s_provenance.txt\n", opt[["out-prefix"]]))

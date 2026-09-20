@@ -1,0 +1,31 @@
+# Power analysis in PLANNING mode: how large would a study need to be?
+#
+# No phenotype, covariate or genotype files are read -- only the sample sizes in
+# power_n_grid. Use this before a study exists, to size it. For power on a cohort
+# you already have, use power_cs.yml instead.
+#
+# nextflow run run_power_analysis.nf -profile standard -params-file example/params_YML/power_planning.yml
+
+# ==================== SAMPLE SIZES TO EVALUATE ====================
+power_n_grid: "500 1000 2500 5000 10000 25000"
+
+# ==================== ANALYSIS TYPE ====================
+linear_flag: true
+longitudinal_flag: false
+survival_flag: false
+
+# ==================== STUDY QC THRESHOLDS ====================
+# Drive the MAC column and Passes_QC: MAC = 2*N*MAF, and a MAF is only testable
+# when MAF >= minor_allele_freq and MAC >= minor_allele_ct. At small N the MAC
+# rule is the binding one.
+minor_allele_freq: "0.05"
+minor_allele_ct: "20"
+
+# ==================== POWER OPTIONS ====================
+power_alpha: 5e-8
+power_target: 0.80
+power_maf_grid: "0.01 0.05 0.10 0.20 0.50"
+power_info: 1.0                              # imputation r2 applied to Var(G)
+power_prefix: "POWER_PLANNING"
+# Results land in <power_outdir>/glm/<power_prefix>/
+power_outdir: "${launchDir}/power_analysis"

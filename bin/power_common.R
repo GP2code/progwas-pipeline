@@ -192,105 +192,194 @@ pheno_sd <- function(df, ycol, num_covs = character(0), cat_covs = character(0),
 # ==============================================================================
 # Output writers
 #
-# One writer for every design, so GLM/LMM/CoxPH rows land in a single table with
-# identical columns, ordering and rounding.
+# Three artefacts per run: the headline results table, an extended-info table
+# holding everything that does not directly inform the headline, and a plot.
+# One writer for every design, so GLM/LMM/CoxPH stay schema-compatible.
 # ==============================================================================
 
-# Fixed scalar schema. Designs fill what applies and leave the rest NA.
-power_row <- function(Phenotype, Design, Term = "main", Study_arm = "ALL",
+# Expected minor allele count at a given MAF: 2N alleles per diploid sample.
+mac_at_maf <- function(N_subjects, maf) 2 * N_subjects * maf
+
+# One entry per group (study arm, or a single planned N). Designs fill what
+# applies and leave the rest NA.
+power_row <- function(Phenotype, Design, Group, N_info,
+                      N_info_formula, N_info_basis,
+                      Alpha, Target_power,
                       N_subjects = NA_integer_, N_obs = NA_integer_,
                       N_events = NA_integer_, Censoring_pct = NA_real_,
                       Visits_mean_k = NA_real_, ICC = NA_real_, ICC_source = NA_character_,
-                      N_info = NA_real_, N_info_formula = NA_character_,
-                      N_info_basis = NA_character_,
-                      Alpha = NA_real_, Target_power = NA_real_,
-                      Info_r2 = NA_real_, Info_source = NA_character_,
+                      Info_r2 = 1, Info_source = NA_character_,
+                      MAF_threshold = NA_real_, MAC_threshold = NA_real_,
                       MAF_floor = NA_real_, MAF_floor_basis = NA_character_,
                       SD_pheno = NA_real_, SD_source = NA_character_,
                       Rank_INT = NA, Effect_scale = NA_character_,
                       Model_package = NA_character_, Power_packages = NA_character_,
                       Power_method = NA_character_, Method_citation = NA_character_) {
   row <- as.list(environment())
-  row$Lambda_req <- if (!is.na(Alpha) && !is.na(Target_power)) lambda_req(Target_power, Alpha) else NA_real_
-  row$MDE_R2 <- if (!is.na(N_info) && !is.na(row$Lambda_req)) row$Lambda_req / N_info else NA_real_
+  row$Lambda_req <- lambda_req(Target_power, Alpha)
+  row$MDE_R2 <- row$Lambda_req / N_info
   row$MDE_R2_pct <- 100 * row$MDE_R2
   row
 }
 
-POWER_SCALAR_COLS <- c(
-  "Phenotype", "Design", "Term", "Study_arm",
+round_numeric <- function(df, digits = 6) {
+  for (nm in names(df)) if (is.numeric(df[[nm]])) df[[nm]] <- signif(df[[nm]], digits)
+  df
+}
+
+write_tsv <- function(df, path) {
+  write.table(round_numeric(df), path, sep = "\t", row.names = FALSE,
+              quote = FALSE, na = "NA")
+  path
+}
+
+# Column glossaries. Written from the same name lists the tables are built from,
+# so a new column cannot silently appear without a description.
+COLUMN_KEY <- c(
+  Phenotype        = "Phenotype column analysed; 'planned' in planning mode.",
+  Design           = "Analysis design: glm, lmm_gallop or cph.",
+  Group            = "Study arm, 'ALL' for the pooled cohort, or 'N=<n>' in planning mode.",
+  N_info           = "Effective information: samples for GLM/LMM, observed events for CoxPH. Drives all MDEs.",
+  MAF              = "Minor allele frequency evaluated at this row.",
+  MAC              = "Expected minor allele count at this MAF: 2 * N * MAF.",
+  MDE_R2_pct       = "Smallest variance explained (%) detectable at the target power. MAF-free, so constant within a group.",
+  MDE_beta         = "Smallest per-allele effect detectable, in SD units of the phenotype.",
+  MDE_beta_raw     = "MDE_beta rescaled to the phenotype's own units (MDE_beta * SD_pheno). NA if no SD is available.",
+  MDE_HR           = "Smallest per-allele hazard ratio detectable (CoxPH only; NA otherwise).",
+  Passes_QC        = "TRUE when this MAF survives the study filters: MAF >= MAF_threshold and MAC >= MAC_threshold.",
+  N_subjects       = "Distinct subjects contributing to this group.",
+  N_obs            = "Rows contributing (equals N_subjects for cross-sectional data).",
+  N_events         = "Observed events (CoxPH only). This, not N_subjects, is what powers a survival analysis.",
+  Censoring_pct    = "Percentage of subjects censored (CoxPH only).",
+  Visits_mean_k    = "Mean repeated measurements per subject (LMM only).",
+  ICC              = "Intraclass correlation of repeated measures (LMM only); higher ICC means repeat visits add less information.",
+  ICC_source       = "How the ICC was obtained: estimated from the data or user-supplied.",
+  N_info_formula   = "Formula used for N_info: 'N', 'N*k/(1+(k-1)*rho)' or 'D (events)'.",
+  N_info_basis     = "Plain-language statement of exactly what was counted, including QC caveats.",
+  Alpha            = "Significance threshold (5e-8 = genome-wide).",
+  Target_power     = "Power the MDEs are solved for (0.80 = 80%).",
+  Lambda_req       = "Non-centrality parameter required at this alpha and power; 39.601 at 5e-8 / 0.80.",
+  MDE_R2           = "MDE_R2_pct as a proportion rather than a percentage.",
+  Info_r2          = "Imputation quality r2 applied to Var(G). 1.0 means genotyped or assumed perfect.",
+  Info_source      = "Whether Info_r2 was measured, user-supplied, or assumed.",
+  MAF_threshold    = "Study MAF filter (params.minor_allele_freq), used for Passes_QC.",
+  MAC_threshold    = "Study MAC filter (params.minor_allele_ct), used for Passes_QC.",
+  MAF_floor        = "Lowest MAF actually testable: max(MAF_threshold, MAC_threshold/(2N)).",
+  MAF_floor_basis  = "The MAF_floor arithmetic written out.",
+  SD_pheno         = "Phenotype SD used to convert MDE_beta to raw units. 1 if rank-INT transformed.",
+  SD_source        = "How SD_pheno was obtained: residual after covariates, marginal, supplied, or rank-INT.",
+  Rank_INT         = "TRUE if the phenotype was rank-inverse-normal transformed before the GWAS.",
+  Effect_scale     = "Units of the MDE effect columns.",
+  Model_package    = "Software that fits the association model in the pipeline.",
+  Power_packages   = "Software that computed these power numbers (distinct from Model_package).",
+  Power_method     = "Statistical framework and its assumptions.",
+  Method_citation  = "References for the method and the additive-coding convention."
+)
+
+write_column_key <- function(cols, path) {
+  desc <- unname(COLUMN_KEY[cols])
+  desc[is.na(desc)] <- "(no description available)"
+  write_tsv(data.frame(Column = cols, Description = desc, stringsAsFactors = FALSE), path)
+}
+
+# Headline table: one row per group x MAF. MAC and Passes_QC show which MAF
+# values the study's own thresholds actually keep -- the knobs a researcher tunes.
+write_results_table <- function(rows, maf_grid, out_prefix, hazard = FALSE) {
+  out <- do.call(rbind, lapply(rows, function(r) {
+    mac <- mac_at_maf(if (is.na(r$N_subjects)) r$N_info else r$N_subjects, maf_grid)
+    beta <- mde_beta(r$N_info, maf_grid, r$Info_r2, r$Alpha, r$Target_power)
+    data.frame(
+      Phenotype = r$Phenotype, Design = r$Design, Group = r$Group,
+      N_info = r$N_info, MAF = maf_grid, MAC = mac,
+      MDE_R2_pct = r$MDE_R2_pct,
+      MDE_beta = beta,
+      MDE_beta_raw = if (is.na(r$SD_pheno)) NA_real_ else beta * r$SD_pheno,
+      MDE_HR = if (hazard) exp(beta) else NA_real_,
+      Passes_QC = (is.na(r$MAF_threshold) | maf_grid >= r$MAF_threshold) &
+                  (is.na(r$MAC_threshold) | mac >= r$MAC_threshold),
+      stringsAsFactors = FALSE)
+  }))
+  write_column_key(names(out), file.path(dirname(out_prefix), "power_results_key.tsv"))
+  write_tsv(out, paste0(out_prefix, "_power_results.tsv"))
+}
+
+EXTENDED_COLS <- c(
+  "Phenotype", "Design", "Group",
   "N_subjects", "N_obs", "N_events", "Censoring_pct", "Visits_mean_k",
   "ICC", "ICC_source",
   "N_info", "N_info_formula", "N_info_basis",
-  "Alpha", "Target_power", "Lambda_req", "MDE_R2", "MDE_R2_pct",
-  "Info_r2", "Info_source", "MAF_floor", "MAF_floor_basis",
+  "Alpha", "Target_power", "Lambda_req", "MDE_R2",
+  "Info_r2", "Info_source",
+  "MAF_threshold", "MAC_threshold", "MAF_floor", "MAF_floor_basis",
   "SD_pheno", "SD_source", "Rank_INT", "Effect_scale",
   "Model_package", "Power_packages", "Power_method", "Method_citation"
 )
 
-round_numeric <- function(df, digits = 6) {
-  for (nm in names(df)) {
-    if (is.numeric(df[[nm]])) df[[nm]] <- signif(df[[nm]], digits)
-  }
-  df
+# Everything needed to interpret or reproduce the headline numbers, kept out of
+# the results table so that stays readable.
+write_extended_info <- function(rows, out_prefix) {
+  out <- do.call(rbind, lapply(rows, function(r) {
+    as.data.frame(r[EXTENDED_COLS], stringsAsFactors = FALSE)
+  }))
+  write_column_key(names(out), file.path(dirname(out_prefix), "extended_info_key.tsv"))
+  write_tsv(out, paste0(out_prefix, "_power_extended_info.tsv"))
 }
 
-# Column-name suffix for a MAF. %g avoids the leading-space padding formatC adds,
-# which would otherwise split the TSV header.
-maf_label <- function(maf) gsub("[^0-9.]", "", sprintf("%g", maf))
+# MDE R2 = lambda_req / N_info, so this is a straight line on log-log axes.
+# Each group is marked on it, which answers "how much more N would I need?".
+plot_power_curve <- function(rows, out_prefix, alpha, target_power) {
+  path <- paste0(out_prefix, "_power_curve.png")
 
-# Writes the wide per-design table (one row per arm, MDE columns across the grid)
-# and the tidy long table (one row per arm x MAF).
-write_power_tables <- function(rows, maf_grid, out_prefix, hazard = FALSE) {
-  stopifnot(length(rows) > 0)
-
-  scalars <- do.call(rbind, lapply(rows, function(r) {
-    as.data.frame(r[POWER_SCALAR_COLS], stringsAsFactors = FALSE)
-  }))
-
-  wide <- scalars
-  long <- list()
-
-  for (i in seq_along(rows)) {
-    r <- rows[[i]]
-    info <- if (is.na(r$Info_r2)) 1 else r$Info_r2
-    beta <- mde_beta(r$N_info, maf_grid, info, r$Alpha, r$Target_power)
-    beta_raw <- if (is.na(r$SD_pheno)) rep(NA_real_, length(maf_grid)) else beta * r$SD_pheno
-    hr <- if (hazard) exp(beta) else rep(NA_real_, length(maf_grid))
-
-    long[[i]] <- data.frame(
-      Phenotype = r$Phenotype, Design = r$Design, Term = r$Term, Study_arm = r$Study_arm,
-      N_info = r$N_info, MAF = maf_grid, Var_G = varG(maf_grid, info), Info_r2 = info,
-      MDE_R2 = r$MDE_R2, MDE_beta = beta, MDE_beta_raw = beta_raw, MDE_HR = hr,
-      Below_MAF_floor = maf_grid < r$MAF_floor,
-      Alpha = r$Alpha, Target_power = r$Target_power,
-      stringsAsFactors = FALSE
-    )
-
-    for (j in seq_along(maf_grid)) {
-      wide[i, paste0("MDE_beta_MAF", maf_label(maf_grid[j]))] <- beta[j]
-    }
-    if (!all(is.na(beta_raw))) {
-      for (j in seq_along(maf_grid)) {
-        wide[i, paste0("MDE_beta_raw_MAF", maf_label(maf_grid[j]))] <- beta_raw[j]
-      }
-    }
-    if (hazard) {
-      for (j in seq_along(maf_grid)) {
-        wide[i, paste0("MDE_HR_MAF", maf_label(maf_grid[j]))] <- hr[j]
-      }
-    }
+  # Log-scale ticks at 1/2/5 x powers of ten, written out in full rather than
+  # in scientific notation (sample sizes) and without trailing zeros (percentages).
+  log_ticks <- function(lo, hi) {
+    e <- floor(log10(lo)):ceiling(log10(hi))
+    t <- as.vector(outer(c(1, 2, 5), 10^e))
+    sort(unique(t[t >= lo & t <= hi]))
+  }
+  fmt_tick <- function(x) {
+    format(x, scientific = FALSE, trim = TRUE, drop0trailing = TRUE, big.mark = ",")
   }
 
-  long <- do.call(rbind, long)
+  ok <- tryCatch({
+    n_vals <- vapply(rows, function(r) r$N_info, numeric(1))
+    labels <- vapply(rows, function(r) as.character(r$Group), character(1))
+    design <- as.character(rows[[1]]$Design)
+    lam <- lambda_req(target_power, alpha)
 
-  wide_path <- paste0(out_prefix, "_power_table.tsv")
-  long_path <- paste0(out_prefix, "_power_long.tsv")
-  write.table(round_numeric(wide), wide_path, sep = "\t", row.names = FALSE,
-              quote = FALSE, na = "NA")
-  write.table(round_numeric(long), long_path, sep = "\t", row.names = FALSE,
-              quote = FALSE, na = "NA")
-  invisible(list(wide = wide_path, long = long_path))
+    # CoxPH power is driven by events, not people; every other design by samples.
+    x_label <- if (identical(design, "cph")) "N_events" else "N_samples"
+
+    lo <- 10^floor(log10(min(n_vals) / 3))
+    hi <- 10^ceiling(log10(max(n_vals) * 3))
+    curve_n <- exp(seq(log(lo), log(hi), length.out = 200))
+    curve_y <- 100 * lam / curve_n
+
+    png(path, width = 1000, height = 700, res = 120,
+        type = if (capabilities("cairo")) "cairo" else "Xlib")
+    on.exit(dev.off(), add = TRUE)
+    par(mar = c(4.5, 4.8, 3.5, 1))
+    plot(curve_n, curve_y, log = "xy", type = "l", lwd = 2, col = "#2c7bb6",
+         axes = FALSE, xlab = x_label,
+         ylab = expression("Minimum detectable " * R^2 * " (%)"),
+         main = sprintf("Detectable effect vs sample size (alpha=%.3g, power=%.2f)",
+                        alpha, target_power))
+    xt <- log_ticks(min(curve_n), max(curve_n))
+    yt <- log_ticks(min(curve_y), max(curve_y))
+    axis(1, at = xt, labels = fmt_tick(xt))
+    axis(2, at = yt, labels = fmt_tick(yt), las = 1)
+    box()
+    abline(v = xt, h = yt, col = "grey88", lty = 3)
+    lines(curve_n, curve_y, lwd = 2, col = "#2c7bb6")
+    points(n_vals, 100 * lam / n_vals, pch = 19, col = "#d7191c", cex = 1.2)
+    # Alternate label side so groups with similar N do not overprint each other.
+    side <- rep(c(4, 2), length.out = length(n_vals))[rank(n_vals, ties.method = "first")]
+    text(n_vals, 100 * lam / n_vals, labels = labels, pos = side, cex = 0.75, col = "#d7191c")
+    TRUE
+  }, error = function(e) {
+    message("Plot skipped: ", conditionMessage(e)); FALSE
+  })
+  if (ok) invisible(path) else invisible(NULL)
 }
 
 # Records the environment and exact invocation so a reviewer can audit the numbers.

@@ -13,7 +13,12 @@ nextflow.enable.dsl = 2
  * main.nf uses:
  *   nextflow run run_power_analysis.nf -params-file example/params_YML/power_cs.yml
  *
- * Required:
+ * Two modes:
+ *   data      --phenofile + --covarfile: power for the cohort you have, per study arm
+ *   planning  --power_n_grid "500 1000 5000": how big a study would need to be,
+ *             with no phenotype or covariate file at all
+ *
+ * Required (data mode):
  *   --phenofile   Phenotype file (IID or #IID column)
  *   --covarfile   Covariate file, one row per subject
  *   --pheno_name  Phenotype column(s); comma- or space-separated for several
@@ -27,6 +32,7 @@ nextflow.enable.dsl = 2
  *   --power_target       Target power (default: 0.80)
  *   --power_maf_grid     MAF grid for the MDE columns (default: "0.01 0.05 0.10 0.20 0.50")
  *   --power_info         Imputation r2 applied to Var(G) (default: 1.0)
+ *   --power_n_grid       Planning mode: sample sizes to evaluate, e.g. "500 1000 5000"
  *   --power_sd_pheno     Measured phenotype SD; overrides the computed value
  *   --power_rank_int     Phenotype was rank-INT transformed (default: false)
  *   --power_residualize  Take the SD after regressing out covariates (default: true)
@@ -45,6 +51,7 @@ params.power_target   = params.containsKey('power_target')   ? params.power_targ
 params.power_maf_grid = params.containsKey('power_maf_grid') ? params.power_maf_grid : '0.01 0.05 0.10 0.20 0.50'
 params.power_info     = params.containsKey('power_info')     ? params.power_info     : 1.0
 params.power_sd_pheno = params.containsKey('power_sd_pheno') ? params.power_sd_pheno : null
+params.power_n_grid   = params.containsKey('power_n_grid')   ? params.power_n_grid   : null
 params.power_rank_int    = params.containsKey('power_rank_int')    ? params.power_rank_int    : false
 params.power_residualize = params.containsKey('power_residualize') ? params.power_residualize : true
 params.power_per_arm     = params.containsKey('power_per_arm')     ? params.power_per_arm     : true
@@ -92,13 +99,21 @@ def countNonBinaryValues(path, colName, delim) {
 /*
  * Validate up front so failures surface before the DAG starts.
  */
+def nGrid = params.power_n_grid == null ? '' :
+    ((params.power_n_grid instanceof List) ? params.power_n_grid.join(' ')
+      : params.power_n_grid.toString().replaceAll(/[\[\],]/, ' ').trim().replaceAll(/\s+/, ' '))
+def planningMode = nGrid as Boolean
+
 def missingParams = []
-if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
-if (!params.covarfile) missingParams << '--covarfile (path to covariates file)'
+if (!planningMode) {
+    if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
+    if (!params.covarfile) missingParams << '--covarfile (path to covariates file)'
+}
 if (missingParams) {
     error("Missing required parameter(s):\n" +
           missingParams.collect { "  - ${it}" }.join('\n') +
           "\nGenotype files are NOT required for power analysis." +
+          "\nFor study planning without any data, set --power_n_grid \"500 1000 5000\" instead." +
           "\nSee example/params_YML/power_cs.yml for a template.")
 }
 
@@ -117,12 +132,13 @@ if (unsupported) {
           "for LMM, and events D for CoxPH -- so the GLM numbers must not be reused for them.")
 }
 
-def phenoDelim = detectDelimiter(params.phenofile)
-def phenoHeader = readHeaderColumns(params.phenofile, '--phenofile')
-def covarHeader = readHeaderColumns(params.covarfile, '--covarfile')
-def phenoNames = parsePhenoNames(params.pheno_name)
+def phenoNames = planningMode ? ['planned'] : parsePhenoNames(params.pheno_name)
+def phenoDelim  = planningMode ? '\t' : detectDelimiter(params.phenofile)
+def phenoHeader = planningMode ? ([] as Set) : readHeaderColumns(params.phenofile, '--phenofile')
+def covarHeader = planningMode ? ([] as Set) : readHeaderColumns(params.covarfile, '--covarfile')
 
 def missingColumns = []
+if (!planningMode) {
 if (!phenoNames) missingColumns << "--pheno_name is empty"
 phenoNames.each { col ->
     if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
@@ -148,6 +164,7 @@ phenoNames.each { col ->
                            "n1*n2/(n1+n2), not N")
     }
 }
+}
 if (missingColumns) {
     error("Phenotype/covariate validation failed:\n" +
           missingColumns.collect { "  - ${it}" }.join('\n') +
@@ -163,9 +180,10 @@ def mafGrid = (params.power_maf_grid instanceof List)
 log.info """\
  PROGWAS - POWER ANALYSIS
  ======================================
- phenotype file       : ${params.phenofile}
- covariate file       : ${params.covarfile}
- phenotype name(s)    : ${phenoNames.join(', ')}
+ mode                 : ${planningMode ? 'planning (--power_n_grid)' : 'data (phenotype + covariate files)'}
+ phenotype file       : ${planningMode ? '(none)' : params.phenofile}
+ covariate file       : ${planningMode ? '(none)' : params.covarfile}
+ phenotype name(s)    : ${planningMode ? "N grid: ${nGrid}" : phenoNames.join(', ')}
  numeric covariates   : ${params.covar_numeric ?: '(none)'}
  categorical covars   : ${params.covar_categorical ?: '(none)'}
  study arm column     : ${params.study_arm_col ?: '(none)'}
@@ -186,30 +204,39 @@ process POWER_GLM {
     // conf/base.config retries twice by default, which would bury a deterministic argument error.
     errorStrategy 'terminate'
 
-    publishDir "${params.power_outdir}", mode: 'copy', overwrite: true,
-               pattern: "*_power_{table,long}.tsv"
-    publishDir "${params.power_outdir}/provenance", mode: 'copy', overwrite: true,
-               pattern: "*_provenance.txt"
+    publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_{results,extended_info}.tsv"
+    // Column glossaries: identical across phenotypes, so they simply overwrite.
+    publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "{power_results,extended_info}_key.tsv"
+    publishDir "${params.power_outdir}/glm/${params.power_prefix}", mode: 'copy',
+               overwrite: true, pattern: "*_power_curve.png"
+    publishDir "${params.power_outdir}/glm/${params.power_prefix}/provenance", mode: 'copy',
+               overwrite: true, pattern: "*_provenance.txt"
 
     input:
       tuple val(pheno), path(phenofile), path(covarfile)
 
     output:
-      path "${params.power_prefix}_${pheno}_power_table.tsv", emit: table
-      path "${params.power_prefix}_${pheno}_power_long.tsv",  emit: tidy
-      path "${params.power_prefix}_${pheno}_provenance.txt",  emit: provenance
+      path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
+      path "${params.power_prefix}_${pheno}_power_extended_info.tsv", emit: extended
+      path "power_results_key.tsv",                                   emit: results_key
+      path "extended_info_key.tsv",                                   emit: extended_key
+      path "${params.power_prefix}_${pheno}_power_curve.png",         emit: plot, optional: true
+      path "${params.power_prefix}_${pheno}_provenance.txt",          emit: provenance
 
     script:
       def sdOpt = params.power_sd_pheno ? "--sd-pheno ${params.power_sd_pheno}" : ''
       def rankOpt = params.power_rank_int ? '--rank-int' : ''
-      """
-      power_analysis_glm.R \\
-        --pheno-file ${phenofile} \\
+      def dataOpts = planningMode ? "--n-grid '${nGrid}'" : """--pheno-file ${phenofile} \\
         --covar-file ${covarfile} \\
         --pheno-name '${pheno}' \\
         --study-arm-col '${params.study_arm_col ?: ''}' \\
         --covar-numeric '${params.covar_numeric ?: ''}' \\
-        --covar-categorical '${params.covar_categorical ?: ''}' \\
+        --covar-categorical '${params.covar_categorical ?: ''}'"""
+      """
+      power_analysis_glm.R \\
+        ${dataOpts} \\
         --maf-grid '${mafGrid}' \\
         --minor-allele-freq ${params.minor_allele_freq} \\
         --minor-allele-ct ${params.minor_allele_ct} \\
@@ -224,14 +251,15 @@ process POWER_GLM {
 }
 
 workflow {
-    pheno_f = file(params.phenofile, checkIfExists: true)
-    covar_f = file(params.covarfile, checkIfExists: true)
+    // Planning mode stages no files; an empty list keeps the input cardinality the same.
+    pheno_f = planningMode ? [] : file(params.phenofile, checkIfExists: true)
+    covar_f = planningMode ? [] : file(params.covarfile, checkIfExists: true)
 
     jobs = Channel.fromList(phenoNames).map { p -> tuple(p, pheno_f, covar_f) }
 
     POWER_GLM(jobs)
 
-    POWER_GLM.out.table.subscribe { f -> log.info " power table: ${f.name}" }
+    POWER_GLM.out.results.subscribe { f -> log.info " results: ${f.name}" }
 }
 
 /*

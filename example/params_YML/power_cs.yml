@@ -32,10 +32,11 @@ minor_allele_ct: "20"
 # ==================== POWER OPTIONS ====================
 power_alpha: 5e-8                            # genome-wide significance
 power_target: 0.80                           # target power
-power_maf_grid: "0.01 0.05 0.10 0.20 0.50"   # MAF grid for the MDE columns
+power_maf_grid: "0.01 0.05 0.10 0.20 0.50"   # MAF grid; MAC = 2*N*MAF is reported alongside
 power_info: 1.0                              # imputation r2 applied to Var(G)
 power_rank_int: false                        # true if the phenotype was rank-INT transformed
 power_residualize: true                      # take the SD after regressing out covariates
 power_per_arm: true                          # report each study_arm separately
 power_prefix: "POWER_CS"
-power_outdir: "${launchDir}/power_analysis/cs"
+# Results land in <power_outdir>/glm/<power_prefix>/
+power_outdir: "${launchDir}/power_analysis"
