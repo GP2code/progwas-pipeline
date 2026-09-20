@@ -113,8 +113,11 @@ fix_plink_headers <- function(df, label) {
 read_keyed_table <- function(path, label) {
   if (is.null(path) || !nzchar(path)) stop(sprintf("--%s is required.", label))
   if (!file.exists(path)) stop(sprintf("--%s not found: %s", label, path))
+  # fill/na.strings tolerate ragged rows and empty trailing fields, which the
+  # bundled example/phenotype.cs2.tsv has and which pandas accepts elsewhere in the pipeline.
   df <- read.table(path, header = TRUE, sep = detect_delim(path),
-                   comment.char = "", check.names = TRUE, stringsAsFactors = FALSE)
+                   comment.char = "", check.names = TRUE, stringsAsFactors = FALSE,
+                   fill = TRUE, na.strings = c("NA", "NaN", ""))
   fix_plink_headers(df, label)
 }
 

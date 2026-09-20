@@ -1,0 +1,41 @@
+# Power analysis for a cross-sectional quantitative GWAS (GLM).
+#
+# Computes minimum detectable effect sizes from the phenotype and covariate
+# files alone -- no genotypes, no References, no plink2 required. Imputation
+# quality is therefore assumed to be 1.0; pass power_info to override it.
+#
+# nextflow run run_power_analysis.nf -profile standard -params-file example/params_YML/power_cs.yml
+
+# ==================== INPUT FILES ====================
+phenofile: "${projectDir}/example/phenotype.cs.tsv"
+covarfile: "${projectDir}/example/covariates.tsv"
+
+# ==================== VARIABLE NAMES ====================
+# Quantitative phenotype only. A binary 0/1 column (e.g. y2 in phenotype.cs2.tsv)
+# is rejected: a case/control contrast needs N_info = n1*n2/(n1+n2), not N.
+pheno_name: "y"
+covar_numeric: "SEX age_at_baseline"
+covar_categorical: "site specimen"
+study_arm_col: "study_arm"
+
+# ==================== ANALYSIS TYPE ====================
+linear_flag: true
+longitudinal_flag: false
+survival_flag: false
+
+# ==================== STUDY QC THRESHOLDS ====================
+# Used for the effective MAF floor: max(minor_allele_freq, minor_allele_ct/(2N)).
+# At small N the MAC rule binds harder than the MAF rule.
+minor_allele_freq: "0.05"
+minor_allele_ct: "20"
+
+# ==================== POWER OPTIONS ====================
+power_alpha: 5e-8                            # genome-wide significance
+power_target: 0.80                           # target power
+power_maf_grid: "0.01 0.05 0.10 0.20 0.50"   # MAF grid for the MDE columns
+power_info: 1.0                              # imputation r2 applied to Var(G)
+power_rank_int: false                        # true if the phenotype was rank-INT transformed
+power_residualize: true                      # take the SD after regressing out covariates
+power_per_arm: true                          # report each study_arm separately
+power_prefix: "POWER_CS"
+power_outdir: "${launchDir}/power_analysis/cs"
