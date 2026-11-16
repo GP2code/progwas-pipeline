@@ -78,6 +78,14 @@ parse_num_list <- function(x, label = "value list") {
   out
 }
 
+# Splits a path list on commas or newlines only -- not whitespace, which a
+# directory name may legitimately contain.
+parse_paths <- function(x) {
+  if (is.null(x) || !nzchar(trimws(as.character(x)))) return(character(0))
+  parts <- trimws(unlist(strsplit(as.character(x), "[,\n]+")))
+  parts[nzchar(parts)]
+}
+
 # ==============================================================================
 # Input readers
 # ==============================================================================
@@ -143,6 +151,31 @@ merge_pheno_covar <- function(pheno, covar) {
                  nrow(merged), nrow(pheno)))
   }
   merged
+}
+
+# Reads the post-QC analysis set a completed main.nf run leaves in
+# prepared_data/*_filtered.pca.harmonized.tsv -- one file per study arm, holding
+# exactly the analysed samples with PC1..PCn already merged in by MERGE_PCA.
+# Used in place of the raw covariate file so N and the covariates match the GWAS.
+read_analysis_set <- function(paths) {
+  parts <- lapply(paths, function(p) read_keyed_table(p, "analysis-set"))
+  if (length(parts) > 1) {
+    common <- Reduce(intersect, lapply(parts, names))
+    if (!length(common)) stop("--analysis-set files share no columns; are they from the same run?")
+    dropped <- setdiff(unique(unlist(lapply(parts, names))), common)
+    if (length(dropped)) {
+      warning(sprintf("Dropped column(s) absent from some --analysis-set files: %s",
+                      paste(dropped, collapse = ", ")))
+    }
+    parts <- lapply(parts, function(d) d[, common, drop = FALSE])
+  }
+  df <- do.call(rbind, parts)
+  dup <- duplicated(df$IID)
+  if (any(dup)) {
+    stop(sprintf(paste0("--analysis-set has %d IID(s) present in more than one file; study arms ",
+                        "must not overlap. First: '%s'."), sum(dup), df$IID[dup][1]))
+  }
+  df
 }
 
 # Splits into an 'ALL' pseudo-arm plus one entry per level of arm_col.
@@ -234,6 +267,7 @@ mac_at_maf <- function(N_subjects, maf) 2 * N_subjects * maf
 # applies and leave the rest NA.
 power_row <- function(Phenotype, Design, Group, N_info,
                       N_info_formula, N_info_basis,
+                      Sample_source = NA_character_,
                       Alpha, Target_power,
                       N_subjects = NA_integer_, N_obs = NA_integer_,
                       N_events = NA_integer_, Censoring_pct = NA_real_,
@@ -286,6 +320,7 @@ COLUMN_KEY <- c(
   ICC_source       = "How the ICC was obtained: estimated from the data or user-supplied.",
   N_info_formula   = "Formula used for N_info: 'N', 'N*k/(1+(k-1)*rho)' or 'D (events)'.",
   N_info_basis     = "Plain-language statement of exactly what was counted, including QC caveats.",
+  Sample_source    = "Where the sample set came from: a post-QC analysis set from a completed run, or the raw pre-QC covariate file.",
   Alpha            = "Significance threshold (5e-8 = genome-wide).",
   Target_power     = "Power the MDEs are solved for (0.80 = 80%).",
   Lambda_req       = "Non-centrality parameter required at this alpha and power; 39.601 at 5e-8 / 0.80.",
@@ -337,7 +372,7 @@ EXTENDED_COLS <- c(
   "Phenotype", "Design", "Group",
   "N_subjects", "N_obs", "N_events", "Censoring_pct", "Visits_mean_k",
   "ICC", "ICC_source",
-  "N_info", "N_info_formula", "N_info_basis",
+  "N_info", "N_info_formula", "N_info_basis", "Sample_source",
   "Alpha", "Target_power", "Lambda_req", "MDE_R2",
   "Info_r2", "Info_source",
   "MAF_threshold", "MAC_threshold", "MAF_floor", "MAF_floor_basis",

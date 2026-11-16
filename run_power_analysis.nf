@@ -13,14 +13,17 @@ nextflow.enable.dsl = 2
  * main.nf uses:
  *   nextflow run run_power_analysis.nf -params-file example/params_YML/power_cs.yml
  *
- * Two modes:
- *   data      --phenofile + --covarfile: power for the cohort you have, per study arm
- *   planning  --power_n_grid "500 1000 5000": how big a study would need to be,
- *             with no phenotype or covariate file at all
+ * Three modes:
+ *   planning  BEFORE a run: --power_n_grid "500 1000 5000", no data files at all
+ *   data      BEFORE a run: --phenofile + --covarfile, using the cohort you have
+ *   after     AFTER a run: --power_analysis_set pointing at that run's
+ *             prepared_data/*_filtered.pca.harmonized.tsv. This is the accurate one --
+ *             N is the post-QC analysed sample count and the covariates are the real
+ *             ones, PC1..PCn included, so the SD is a genuine residual SD.
  *
  * Required (data mode):
  *   --phenofile   Phenotype file (IID or #IID column)
- *   --covarfile   Covariate file, one row per subject
+ *   --covarfile   Covariate file, one row per subject (omit if --power_analysis_set is set)
  *   --pheno_name  Phenotype column(s); comma- or space-separated for several
  *   plus one analysis flag: --linear_flag (GLM). Longitudinal (LMM) and survival
  *   (CoxPH) power are not implemented yet.
@@ -31,7 +34,10 @@ nextflow.enable.dsl = 2
  *   --power_alpha        Significance threshold (default: 5e-8)
  *   --power_target       Target power (default: 0.80)
  *   --power_maf_grid     MAF grid for the MDE columns (default: "0.01 0.05 0.10 0.20 0.50")
- *   --power_info         Imputation r2 applied to Var(G) (default: 1.0)
+ *   --power_info         Imputation r2 applied to Var(G) (default: 1.0, i.e. assumed)
+ *   --power_analysis_set Post-QC analysis set(s) from a completed run; a path, a glob or a
+ *                        comma-separated list. Replaces --covarfile, so N, the covariates
+ *                        and the PCs are the ones the GWAS actually used
  *   --power_n_grid       Planning mode: sample sizes to evaluate, e.g. "500 1000 5000"
  *   --power_icc          LMM: intraclass correlation; estimated from data if omitted,
  *                        required in planning mode
@@ -58,6 +64,7 @@ params.power_target   = params.containsKey('power_target')   ? params.power_targ
 params.power_maf_grid = params.containsKey('power_maf_grid') ? params.power_maf_grid : '0.01 0.05 0.10 0.20 0.50'
 params.power_info     = params.containsKey('power_info')     ? params.power_info     : 1.0
 params.power_sd_pheno = params.containsKey('power_sd_pheno') ? params.power_sd_pheno : null
+params.power_analysis_set = params.containsKey('power_analysis_set') ? params.power_analysis_set : null
 params.power_n_grid   = params.containsKey('power_n_grid')   ? params.power_n_grid   : null
 params.power_icc        = params.containsKey('power_icc')        ? params.power_icc        : null
 params.power_visits     = params.containsKey('power_visits')     ? params.power_visits     : null
@@ -116,10 +123,37 @@ def nGrid = params.power_n_grid == null ? '' :
       : params.power_n_grid.toString().replaceAll(/[\[\],]/, ' ').trim().replaceAll(/\s+/, ' '))
 def planningMode = nGrid as Boolean
 
+// A glob is the natural way to name every study arm a run produced, so expand one
+// here: file() returns a List for a pattern and a single Path otherwise.
+// One YAML serves both modes, so refuse the ambiguous case rather than silently
+// preferring one: the user must comment out the block they are not using.
+if (planningMode && params.power_analysis_set) {
+    error("--power_n_grid (planning, BEFORE a run) and --power_analysis_set (AFTER a run) " +
+          "are mutually exclusive.\nComment out whichever block you are not using.")
+}
+
+def analysisSetFiles = []
+if (params.power_analysis_set && !planningMode) {
+    params.power_analysis_set.toString().split(',').collect { it.trim() }.findAll { it }.each { pat ->
+        def matched = file(pat)
+        if (matched instanceof List) analysisSetFiles.addAll(matched)
+        else if (matched.exists())   analysisSetFiles << matched
+        else error("--power_analysis_set matched no file: '${pat}'")
+    }
+    if (!analysisSetFiles) {
+        error("--power_analysis_set '${params.power_analysis_set}' matched no files.\n" +
+              "Expected a completed run's prepared_data/*_filtered.pca.harmonized.tsv.")
+    }
+    analysisSetFiles = analysisSetFiles.sort { it.name }
+}
+def useAnalysisSet = analysisSetFiles as Boolean
+
 def missingParams = []
 if (!planningMode) {
     if (!params.phenofile) missingParams << '--phenofile (path to phenotype file)'
-    if (!params.covarfile) missingParams << '--covarfile (path to covariates file)'
+    if (!params.covarfile && !useAnalysisSet) {
+        missingParams << '--covarfile (path to covariates file), or --power_analysis_set for a completed run'
+    }
 }
 if (missingParams) {
     error("Missing required parameter(s):\n" +
@@ -140,7 +174,9 @@ if (!designs) {
 def phenoNames = planningMode ? ['planned'] : parsePhenoNames(params.pheno_name)
 def phenoDelim  = planningMode ? '\t' : detectDelimiter(params.phenofile)
 def phenoHeader = planningMode ? ([] as Set) : readHeaderColumns(params.phenofile, '--phenofile')
-def covarHeader = planningMode ? ([] as Set) : readHeaderColumns(params.covarfile, '--covarfile')
+def covarLabel  = useAnalysisSet ? '--power_analysis_set' : '--covarfile'
+def covarSource = useAnalysisSet ? analysisSetFiles[0].toString() : params.covarfile
+def covarHeader = planningMode ? ([] as Set) : readHeaderColumns(covarSource, covarLabel)
 
 def missingColumns = []
 if (!planningMode) {
@@ -148,18 +184,20 @@ if (!phenoNames) missingColumns << "--pheno_name is empty"
 phenoNames.each { col ->
     if (!(col in phenoHeader)) missingColumns << "--pheno_name '${col}' not found in --phenofile columns"
 }
-// PCs are computed later by COMPUTE_PCA, so they are not expected in a raw covariate file.
+// PCs are computed later by COMPUTE_PCA, so a raw covariate file legitimately lacks
+// them -- but a post-QC analysis set must have them, so check for them there.
 def numericList = (params.covar_numeric ?: '').split(/[\s,]+/).findAll { it }
 numericList.each { col ->
-    if (!(col ==~ /(?i)^PC\d+$/) && !(col in covarHeader)) {
-        missingColumns << "--covar_numeric '${col}' not found in --covarfile columns"
+    def pcExempt = !useAnalysisSet && (col ==~ /(?i)^PC\d+$/)
+    if (!pcExempt && !(col in covarHeader)) {
+        missingColumns << "--covar_numeric '${col}' not found in ${covarLabel} columns"
     }
 }
 (params.covar_categorical ?: '').split(/[\s,]+/).findAll { it }.each { col ->
-    if (!(col in covarHeader)) missingColumns << "--covar_categorical '${col}' not found in --covarfile columns"
+    if (!(col in covarHeader)) missingColumns << "--covar_categorical '${col}' not found in ${covarLabel} columns"
 }
 if (params.study_arm_col && !(params.study_arm_col in covarHeader)) {
-    missingColumns << "--study_arm_col '${params.study_arm_col}' not found in --covarfile columns"
+    missingColumns << "--study_arm_col '${params.study_arm_col}' not found in ${covarLabel} columns"
 }
 if ('lmm' in designs && !(params.time_col in phenoHeader)) {
     missingColumns << "--time_col '${params.time_col}' not found in --phenofile columns (required for LMM)"
@@ -184,7 +222,7 @@ if (missingColumns) {
     error("Phenotype/covariate validation failed:\n" +
           missingColumns.collect { "  - ${it}" }.join('\n') +
           "\n\nphenofile ('${params.phenofile}') columns found: ${phenoHeader.sort()}" +
-          "\ncovarfile ('${params.covarfile}') columns found: ${covarHeader.sort()}")
+          "\n${covarLabel} ('${covarSource}') columns found: ${covarHeader.sort()}")
 }
 
 // A YAML list arrives as a Groovy List, which would interpolate as "[0.01, 0.05]".
@@ -195,9 +233,10 @@ def mafGrid = (params.power_maf_grid instanceof List)
 log.info """\
  PROGWAS - POWER ANALYSIS
  ======================================
- mode                 : ${planningMode ? 'planning (--power_n_grid)' : 'data (phenotype + covariate files)'}
+ mode                 : ${planningMode ? 'planning (--power_n_grid)' : (useAnalysisSet ? 'after a run (post-QC analysis set)' : 'data (phenotype + covariate files)')}
  phenotype file       : ${planningMode ? '(none)' : params.phenofile}
- covariate file       : ${planningMode ? '(none)' : params.covarfile}
+ covariate file       : ${planningMode ? '(none)' : (useAnalysisSet ? '(superseded by the analysis set)' : params.covarfile)}
+ analysis set         : ${planningMode ? '(not applicable in planning mode)' : (useAnalysisSet ? analysisSetFiles.collect { it.name }.join(', ') : '(none - N is PRE-QC and therefore optimistic)')}
  phenotype name(s)    : ${planningMode ? "N grid: ${nGrid}" : phenoNames.join(', ')}
  numeric covariates   : ${params.covar_numeric ?: '(none)'}
  categorical covars   : ${params.covar_categorical ?: '(none)'}
@@ -220,6 +259,13 @@ def commonOpts = { pheno ->
         --covar-numeric '${params.covar_numeric ?: ''}' \\
         --covar-categorical '${params.covar_categorical ?: ''}'"""
 }
+// The analysis set supersedes the covariate file when present. Staged names are
+// used, not the original paths, since the task runs in its own work directory.
+def covarOpts = { covarfile, asetfiles ->
+    def names = [asetfiles].flatten().findAll { it }.collect { it.name }
+    names ? "--analysis-set '${names.join(',')}'" : "--covar-file ${covarfile}"
+}
+
 def sharedOpts = {
     def sd = params.power_sd_pheno ? "--sd-pheno ${params.power_sd_pheno}" : ''
     def rank = params.power_rank_int ? '--rank-int' : ''
@@ -249,7 +295,7 @@ process POWER_GLM {
                overwrite: true, pattern: "*_provenance.txt"
 
     input:
-      tuple val(pheno), path(phenofile), path(covarfile)
+      tuple val(pheno), path(phenofile), path(covarfile), path(analysisset)
 
     output:
       path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
@@ -261,7 +307,7 @@ process POWER_GLM {
 
     script:
       def dataOpts = planningMode ? "--n-grid '${nGrid}'"
-                                  : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        ${commonOpts(pheno)}"
+                                  : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_glm.R \\
         ${dataOpts} \\
@@ -285,7 +331,7 @@ process POWER_LMM {
                overwrite: true, pattern: "*_provenance.txt"
 
     input:
-      tuple val(pheno), path(phenofile), path(covarfile)
+      tuple val(pheno), path(phenofile), path(covarfile), path(analysisset)
 
     output:
       path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
@@ -300,7 +346,7 @@ process POWER_LMM {
       def visitsOpt = params.power_visits != null ? "--visits ${params.power_visits}" : ''
       def dataOpts = planningMode
           ? "--n-grid '${nGrid}' ${visitsOpt}"
-          : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        --time-col '${params.time_col}' \\\n        ${commonOpts(pheno)}"
+          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        --time-col '${params.time_col}' \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_lmm.R \\
         ${dataOpts} \\
@@ -326,7 +372,7 @@ process POWER_CPH {
                overwrite: true, pattern: "*_provenance.txt"
 
     input:
-      tuple val(pheno), path(phenofile), path(covarfile)
+      tuple val(pheno), path(phenofile), path(covarfile), path(analysisset)
 
     output:
       path "${params.power_prefix}_${pheno}_power_results.tsv",       emit: results
@@ -341,7 +387,7 @@ process POWER_CPH {
       def evOpt = params.power_event_col ? "--event-col '${params.power_event_col}'" : ''
       def dataOpts = planningMode
           ? "--n-grid '${nGrid}' ${rateOpt}"
-          : "--pheno-file ${phenofile} \\\n        --covar-file ${covarfile} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
+          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_cph.R \\
         ${dataOpts} \\
@@ -352,10 +398,12 @@ process POWER_CPH {
 
 workflow {
     // Planning mode stages no files; an empty list keeps the input cardinality the same.
+    // The covariate file is likewise left unstaged when an analysis set supersedes it.
     pheno_f = planningMode ? [] : file(params.phenofile, checkIfExists: true)
-    covar_f = planningMode ? [] : file(params.covarfile, checkIfExists: true)
+    covar_f = (planningMode || useAnalysisSet) ? [] : file(params.covarfile, checkIfExists: true)
+    aset_f  = analysisSetFiles
 
-    jobs = Channel.fromList(phenoNames).map { p -> tuple(p, pheno_f, covar_f) }
+    jobs = Channel.fromList(phenoNames).map { p -> tuple(p, pheno_f, covar_f, aset_f) }
 
     // All requested designs run in one launch, unlike main.nf which picks exactly one:
     // power is cheap, and the designs are directly comparable once N_info is right.

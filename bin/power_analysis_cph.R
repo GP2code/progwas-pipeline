@@ -36,6 +36,11 @@ option_list <- list(
               help = "Phenotype file (TSV/CSV; IID or #IID column required)"),
   make_option(c("--covar-file"), type = "character", default = NULL,
               help = "Covariate file; one row per subject"),
+  make_option(c("--analysis-set"), type = "character", default = NULL,
+              help = paste("Post-QC analysis set from a completed run:",
+                           "prepared_data/*_filtered.pca.harmonized.tsv, comma-separated for",
+                           "several study arms. Used INSTEAD of --covar-file, so N and the",
+                           "covariates (PCs included) are the ones the GWAS actually used")),
   make_option(c("--pheno-name"), type = "character", default = "y",
               help = "Phenotype column to analyse [default %default]"),
   make_option(c("--study-arm-col"), type = "character", default = "study_arm",
@@ -91,14 +96,23 @@ source(lib)
 n_grid <- parse_num_list(opt[["n-grid"]], "--n-grid")
 planning_mode <- length(n_grid) > 0
 
+# A post-QC analysis set stands in for the raw covariate file: it holds exactly
+# the samples the GWAS analysed, with the PCs COMPUTE_PCA produced merged in.
+analysis_set <- parse_paths(opt[["analysis-set"]])
+use_analysis_set <- length(analysis_set) > 0 && !planning_mode
+if (use_analysis_set && !is.null(opt[["covar-file"]])) {
+  warning("Both --analysis-set and --covar-file given; using --analysis-set (post-QC).")
+}
+
 if (planning_mode) {
   if (any(n_grid < 2)) stop("--n-grid values must be at least 2.")
   n_grid <- sort(unique(round(n_grid)))
   if (!is.na(opt[["event-rate"]]) && (opt[["event-rate"]] <= 0 || opt[["event-rate"]] > 1)) {
     stop("--event-rate must be in (0, 1].")
   }
-} else if (is.null(opt[["pheno-file"]]) || is.null(opt[["covar-file"]])) {
-  stop("Supply either --n-grid (planning mode) or both --pheno-file and --covar-file.")
+} else if (is.null(opt[["pheno-file"]]) || (is.null(opt[["covar-file"]]) && !use_analysis_set)) {
+  stop(paste("Supply either --n-grid (planning mode), or --pheno-file plus one of",
+             "--covar-file (pre-QC) and --analysis-set (post-QC, recommended after a run)."))
 }
 if (opt$alpha <= 0 || opt$alpha >= 1) stop("--alpha must be between 0 and 1.")
 if (opt[["target-power"]] <= 0 || opt[["target-power"]] >= 1) {
@@ -119,15 +133,20 @@ per_arm <- as_flag(opt[["per-arm"]], TRUE)
 num_covs <- parse_list(opt[["covar-numeric"]])
 cat_covs <- parse_list(opt[["covar-categorical"]])
 
-# PCs are produced later by COMPUTE_PCA and are absent from a raw covariate file.
-num_covs <- num_covs[!grepl("^(?i)PC[0-9]+$", num_covs, perl = TRUE)]
+# PCs are absent from a raw covariate file (COMPUTE_PCA makes them later), but a
+# post-QC analysis set already carries them, so keep them there: the residual SD
+# should be taken over the same covariates the GWAS adjusted for.
+if (!use_analysis_set) {
+  num_covs <- num_covs[!grepl("^(?i)PC[0-9]+$", num_covs, perl = TRUE)]
+}
 
 # ---- read -------------------------------------------------------------------
 
 if (!planning_mode) {
 
 pheno <- read_keyed_table(opt[["pheno-file"]], "pheno-file")
-covar <- read_keyed_table(opt[["covar-file"]], "covar-file")
+covar <- if (use_analysis_set) read_analysis_set(analysis_set)
+         else read_keyed_table(opt[["covar-file"]], "covar-file")
 
 ecol <- if (!is.null(opt[["event-col"]])) opt[["event-col"]] else ycol
 if (!(ecol %in% names(pheno))) {
@@ -173,10 +192,30 @@ r_prov <- sprintf("R %s.%s base stats (qnorm/qchisq/pchisq); optparse %s. No gen
                   tryCatch(as.character(packageVersion("optparse")),
                            error = function(e) "unknown"))
 
+qc_tag <- if (use_analysis_set) "POST-QC" else "PRE-QC"
+
+mode_label <- if (planning_mode) {
+  "planning (--n-grid)"
+} else if (use_analysis_set) {
+  "after a run (post-QC analysis set + phenotype file)"
+} else {
+  "data (phenotype + covariate files, pre-QC)"
+}
+
+sample_source <- if (planning_mode) {
+  "planning mode (no samples read)"
+} else if (use_analysis_set) {
+  sprintf("POST-QC analysis set from a completed run: %s",
+          paste(basename(analysis_set), collapse = ", "))
+} else {
+  "PRE-QC covariate file (ancestry, kinship and missingness filters not yet applied)"
+}
+
 common <- list(
   Phenotype = if (planning_mode) "planned" else ycol,
   Design = "cph",
   N_info_formula = "D (events)",
+  Sample_source = sample_source,
   Alpha = opt$alpha, Target_power = opt[["target-power"]],
   Info_r2 = opt$info,
   Info_source = if (opt$info == 1) "assumed 1.0 (no genotype files read)" else "user-supplied --info",
@@ -226,8 +265,9 @@ if (planning_mode) {
       Group = arm, N_info = d_events,
       N_subjects = n, N_obs = nrow(d), N_events = d_events,
       Censoring_pct = 100 * (1 - d_events / n),
-      N_info_basis = sprintf("%d observed events among %d subjects (%.1f%% censored). Power depends on events, NOT enrolment (PRE-QC)",
-                             d_events, n, 100 * (1 - d_events / n)),
+      N_info_basis = sprintf(paste("%d observed events among %d subjects (%.1f%% censored).",
+                                   "Power depends on events, NOT enrolment (%s)"),
+                             d_events, n, 100 * (1 - d_events / n), qc_tag),
       MAF_floor = maf_floor(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
       MAF_floor_basis = maf_floor_basis(n, opt[["minor-allele-freq"]], opt[["minor-allele-ct"]]),
       SD_pheno = NA_real_, SD_source = "not applicable (effects are on the log-hazard scale)",
@@ -245,9 +285,12 @@ plot_path     <- if (as_flag(opt$plots, TRUE)) {
 
 write_provenance(
   opt[["out-prefix"]], opt,
-  inputs = list(`pheno-file` = opt[["pheno-file"]], `covar-file` = opt[["covar-file"]]),
+  inputs = c(list(`pheno-file` = opt[["pheno-file"]]),
+             if (use_analysis_set)
+               setNames(as.list(analysis_set), sprintf("analysis-set[%d]", seq_along(analysis_set)))
+             else list(`covar-file` = opt[["covar-file"]])),
   extra = c(
-    sprintf("mode: %s", if (planning_mode) "planning (--n-grid)" else "data (phenotype + covariate files)"),
+    sprintf("mode: %s", mode_label),
     sprintf("lambda_req(%.4g, %.3g) = %.4f", opt[["target-power"]], opt$alpha,
             lambda_req(opt[["target-power"]], opt$alpha)),
     sprintf("MAF grid: %s", paste(maf_grid, collapse = " ")),
@@ -256,14 +299,19 @@ write_provenance(
     "N_info = D (observed events). Enrolled N affects only the MAF/MAC floor, not power.",
     if (planning_mode) "Planning mode: N values are hypothetical, not read from data."
     else c(sprintf("repeated IID rows dropped: %d", n_dup),
-           "N is counted from the input files (PRE-QC); the analysed N after ancestry/kinship/",
-           "missingness filtering will be lower, so these MDEs are optimistic.")
+           if (use_analysis_set)
+             c("N comes from the post-QC analysis set, so it is the number of samples the GWAS",
+               "actually analysed, and the covariates include the PCs the pipeline computed.")
+           else
+             c("N is counted from the input files (PRE-QC); the analysed N after ancestry/kinship/",
+               "missingness filtering will be lower, so these MDEs are optimistic."))
   ))
 
 # ---- summary ----------------------------------------------------------------
 
 cat(sprintf("\nCoxPH power analysis - %s mode (alpha=%.3g, target power=%.2f)\n",
-            if (planning_mode) "planning" else "data", opt$alpha, opt[["target-power"]]))
+            if (planning_mode) "planning" else if (use_analysis_set) "after-run" else "data",
+            opt$alpha, opt[["target-power"]]))
 cat(sprintf("%-20s %9s %12s %14s\n", "group", "D (events)", "MDE R2 (%)", "MDE HR@0.05"))
 for (nm in names(rows)) {
   r <- rows[[nm]]
