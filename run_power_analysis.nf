@@ -175,7 +175,8 @@ def phenoNames = planningMode ? ['planned'] : parsePhenoNames(params.pheno_name)
 def phenoDelim  = planningMode ? '\t' : detectDelimiter(params.phenofile)
 def phenoHeader = planningMode ? ([] as Set) : readHeaderColumns(params.phenofile, '--phenofile')
 def covarLabel  = useAnalysisSet ? '--power_analysis_set' : '--covarfile'
-def covarSource = useAnalysisSet ? analysisSetFiles[0].toString() : params.covarfile
+// Keep the Path object: toString() drops the gs:// scheme on cloud paths.
+def covarSource = useAnalysisSet ? analysisSetFiles[0] : params.covarfile
 def covarHeader = planningMode ? ([] as Set) : readHeaderColumns(covarSource, covarLabel)
 
 def missingColumns = []
