@@ -11,7 +11,7 @@ nextflow.enable.dsl = 2
  *
  * Point it at an existing params file -- the data parameters are the same ones
  * main.nf uses:
- *   nextflow run run_power_analysis.nf -params-file example/params_YML/power_cs.yml
+ *   nextflow run run_power_analysis.nf -params-file example/params_YML/power_before.yml
  *
  * Three modes:
  *   planning  BEFORE a run: --power_n_grid "500 1000 5000", no data files at all
@@ -25,8 +25,8 @@ nextflow.enable.dsl = 2
  *   --phenofile   Phenotype file (IID or #IID column)
  *   --covarfile   Covariate file, one row per subject (omit if --power_analysis_set is set)
  *   --pheno_name  Phenotype column(s); comma- or space-separated for several
- *   plus one analysis flag: --linear_flag (GLM). Longitudinal (LMM) and survival
- *   (CoxPH) power are not implemented yet.
+ *   plus at least one analysis flag: --linear_flag (GLM), --longitudinal_flag (LMM)
+ *   or --survival_flag (CoxPH).
  *
  * Optional (power-specific):
  *   --power_outdir       Output directory (default: "${launchDir}/power_analysis")
@@ -160,7 +160,7 @@ if (missingParams) {
           missingParams.collect { "  - ${it}" }.join('\n') +
           "\nGenotype files are NOT required for power analysis." +
           "\nFor study planning without any data, set --power_n_grid \"500 1000 5000\" instead." +
-          "\nSee example/params_YML/power_cs.yml for a template.")
+          "\nSee example/params_YML/power_before.yml for a template.")
 }
 
 def designs = []

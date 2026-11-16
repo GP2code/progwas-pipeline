@@ -1,58 +1,49 @@
-# Power analysis in PLANNING mode: how large would a study need to be?
+# ==================== POWER PLANNING ==================== 
+# How large would a study need to be?
+
+# No phenotype, covariate or genotype files are read (only the sample sizes in power_n_grid). 
+# Use this before a study exists, to size it. 
+
+# For power of an existing cohort, use power_before.yml instead.
+# For power of a completed run, use power_after.yml instead.
 #
-# No phenotype, covariate or genotype files are read -- only the sample sizes in
-# power_n_grid. Use this before a study exists, to size it. For power on a cohort
-# you already have, use power_cs.yml / power_lt.yml / power_surv.yml instead.
-#
-# Works for all three designs. What "sample size" buys differs by design, so each
-# needs its own extra input:
-#
+# What "sample size" buys differs by design:
 #   GLM    N_info = N                     nothing else needed
-#   LMM    N_info = N*k/(1+(k-1)*rho)     needs power_visits (k) and power_icc (rho);
-#                                         neither is estimable without data
-#   CoxPH  N_info = D (events)            power_event_rate converts enrolment to events;
-#                                         omit it and power_n_grid is read as event counts
+#   LMM    N_info = N*k/(1+(k-1)*rho)     needs power_visits (k) and power_icc (rho) (see below)
+#   CoxPH  N_info = D (events)            power_event_rate converts enrolment to events; omit it and power_n_grid is read as event counts
 #
-# nextflow run run_power_analysis.nf -profile standard -params-file example/params_YML/power_planning.yml
+# Example use and extended information in https://github.com/GP2code/progwas-pipeline/tree/main/docs
 
 # ==================== SAMPLE SIZES TO EVALUATE ====================
-# Read as enrolled subjects, except for CoxPH without power_event_rate, where
-# these are event counts directly.
+# Read as enrolled subjects (except for CoxPH without power_event_rate, where these are event counts directly).
 power_n_grid: "500 1000 2500 5000 10000 25000"
 
 # ==================== ANALYSIS TYPE ====================
-# Enable any combination; all requested designs run in one launch and are written
-# to <power_outdir>/<design>/<power_prefix>/.
+# Linear (GLM), Longitudinal (LMM), and Survival (CoxPH).
+# Enable any combination; all requested designs run in one launch and are written to <power_outdir>/<design>/<power_prefix>/.
 linear_flag: true
 longitudinal_flag: false
 survival_flag: false
 
 # ==================== DESIGN-SPECIFIC PLANNING INPUTS ====================
-# Required when longitudinal_flag is true -- with no data there is nothing to
-# estimate them from, so the run fails rather than guessing:
+# Required when longitudinal_flag is true.
+
 # power_visits: 6.0       # mean measurements per subject (k)
-# power_icc: 0.45         # intraclass correlation; repeated clinical measures
-#                         # commonly fall around 0.3-0.6. Higher ICC means repeat
-#                         # visits add less information.
-# power_slope_term: true  # also report the SNPxtime (slope) term, whose N_info is
-#                         # bounded above by N regardless of how many visits there are
-#
+# power_icc: 0.45         # intraclass correlation; repeated clinical measures commonly fall around 0.3-0.6.
+# power_slope_term: true  # also report the SNPxtime (slope) term
+
 # Optional when survival_flag is true:
-# power_event_rate: 0.3   # fraction of enrolled subjects expected to have an event,
-#                         # so D = N * rate. Power depends on events, not enrolment.
+# power_event_rate: 0.3   # fraction of enrolled subjects expected to have an event (so D = N * rate). Power depends on events, not enrolment.
 
 # ==================== STUDY QC THRESHOLDS ====================
-# Drive the MAC column and Passes_QC: MAC = 2*N*MAF, and a MAF is only testable
-# when MAF >= minor_allele_freq and MAC >= minor_allele_ct. At small N the MAC
-# rule is the binding one.
 minor_allele_freq: "0.05"
 minor_allele_ct: "20"
 
 # ==================== POWER OPTIONS ====================
-power_alpha: 5e-8
-power_target: 0.80
-power_maf_grid: "0.01 0.05 0.10 0.20 0.50"
-power_info: 1.0                              # imputation r2 applied to Var(G)
+power_alpha: 5e-8            # genome-wide significance
+power_target: 0.80           # desired power
+power_maf_grid: "0.01 0.05 0.10 0.20 0.50" # MAF grid; MAC = 2*N*MAF is reported alongside
+power_info: 0.7                              # imputation r2 applied to Var(G)
 power_prefix: "POWER_PLANNING"
 # Results land in <power_outdir>/<design>/<power_prefix>/
 power_outdir: "${launchDir}/power_analysis"

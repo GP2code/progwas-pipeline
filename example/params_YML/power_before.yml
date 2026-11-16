@@ -1,0 +1,64 @@
+# ==================== POWER ESTIMATION ====================
+# How much power does an existing cohort have before QC?
+
+# Reads only the phenotype and covariate files (no genotypes, no PCs).
+# The sample size is pre-QC and the minimum detectable effects are optimistic.
+
+# For a study that does not exist yet, use power_planning.yml instead.
+# For power of a completed run (post-QC N and PCs), use power_after.yml instead.
+
+# Example use and extended information in https://github.com/GP2code/progwas-pipeline/tree/main/docs
+
+# ==================== INPUT FILES ====================
+phenofile: "${projectDir}/example/phenotype.cs.tsv"
+covarfile: "${projectDir}/example/covariates.tsv"
+
+# ==================== VARIABLE NAMES ====================
+pheno_name: "y"                  # quantitative for GLM/LMM; a binary 0/1 column is rejected, since a case/control contrast needs N_info = n1*n2/(n1+n2)
+covar_numeric: "SEX age_at_baseline"
+covar_categorical: "site specimen"
+study_arm_col: "study_arm"
+
+# ==================== ANALYSIS TYPE ====================
+# Linear (GLM), Longitudinal (LMM), and Survival (CoxPH).
+# Designs share phenofile and pheno_name, so run one design per launch unless the same columns suit all of them.
+# Results are written to <power_outdir>/<design>/<power_prefix>/.
+linear_flag: true
+longitudinal_flag: false
+survival_flag: false
+
+# ==================== LMM-GALLOP OPTIONS ====================
+# Required when longitudinal_flag is true.
+
+# phenofile: "${projectDir}/example/phenotype.lt.tsv"   # replaces phenofile above; long format, one row per visit
+# time_col: "study_days"         # identifies the repeated measurements
+
+# Optional when longitudinal_flag is true:
+# power_icc: 0.45                # override the ICC estimated from the data
+# power_slope_term: true         # also report the SNPxtime (slope) term, as an upper bound
+
+# ==================== CoxPH OPTIONS ====================
+# Required when survival_flag is true.
+
+# phenofile: "${projectDir}/example/phenotype.surv.tsv" # replaces phenofile above; the bundled file is fully uncensored, so D == N (on real data D is well below N)
+# pheno_name: "surv_y"           # replaces pheno_name above; must be a 0/1 event indicator
+
+# Optional when survival_flag is true:
+# power_event_col: "surv_y"      # set if the event indicator is not pheno_name
+
+# ==================== STUDY QC THRESHOLDS ====================
+# Effective MAF floor is max(minor_allele_freq, minor_allele_ct/(2N)); at small N the MAC rule binds harder than the MAF rule.
+minor_allele_freq: "0.05"
+minor_allele_ct: "20"
+
+# ==================== POWER OPTIONS ====================
+power_alpha: 5e-8                            # genome-wide significance
+power_target: 0.80                           # desired power
+power_maf_grid: "0.01 0.05 0.10 0.20 0.50"   # MAF grid; MAC = 2*N*MAF is reported alongside
+power_info: 0.7                              # imputation r2 applied to Var(G) (assumed value)
+power_rank_int: false                        # true if the phenotype was rank-INT transformed
+power_residualize: true                      # residual SD after the covariates above
+power_per_arm: true                          # one row per study arm plus a pooled ALL row
+power_prefix: "POWER_BEFORE"
+# Results land in <power_outdir>/<design>/<power_prefix>/
+power_outdir: "${launchDir}/power_analysis"
