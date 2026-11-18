@@ -254,23 +254,27 @@ log.info """\
  * One process per design. They differ only in the script called and the
  * design-specific flags; N_info is what actually separates them.
  */
+// Shell-quote a value for the task command, escaping embedded single quotes.
+// Staged path inputs (phenofile, covarfile) are already escaped by Nextflow, so they are not wrapped again.
+def q = { v -> "'" + v.toString().replace("'", "'\\''") + "'" }
+
 def commonOpts = { pheno ->
-    """--pheno-name '${pheno}' \\
-        --study-arm-col '${params.study_arm_col ?: ''}' \\
-        --covar-numeric '${params.covar_numeric ?: ''}' \\
-        --covar-categorical '${params.covar_categorical ?: ''}'"""
+    """--pheno-name ${q(pheno)} \\
+        --study-arm-col ${q(params.study_arm_col ?: '')} \\
+        --covar-numeric ${q(params.covar_numeric ?: '')} \\
+        --covar-categorical ${q(params.covar_categorical ?: '')}"""
 }
 // The analysis set supersedes the covariate file when present. Staged names are
 // used, not the original paths, since the task runs in its own work directory.
 def covarOpts = { covarfile, asetfiles ->
     def names = [asetfiles].flatten().findAll { it }.collect { it.name }
-    names ? "--analysis-set '${names.join(',')}'" : "--covar-file ${covarfile}"
+    names ? "--analysis-set ${q(names.join(','))}" : "--covar-file ${covarfile}"
 }
 
 def sharedOpts = {
     def sd = params.power_sd_pheno ? "--sd-pheno ${params.power_sd_pheno}" : ''
     def rank = params.power_rank_int ? '--rank-int' : ''
-    """--maf-grid '${mafGrid}' \\
+    """--maf-grid ${q(mafGrid)} \\
         --minor-allele-freq ${params.minor_allele_freq} \\
         --minor-allele-ct ${params.minor_allele_ct} \\
         --alpha ${params.power_alpha} \\
@@ -307,13 +311,13 @@ process POWER_GLM {
       path "${params.power_prefix}_${pheno}_provenance.txt",          emit: provenance
 
     script:
-      def dataOpts = planningMode ? "--n-grid '${nGrid}'"
+      def dataOpts = planningMode ? "--n-grid ${q(nGrid)}"
                                   : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_glm.R \\
         ${dataOpts} \\
         ${sharedOpts()} \\
-        --out-prefix ${params.power_prefix}_${pheno}
+        --out-prefix ${q("${params.power_prefix}_${pheno}")}
       """
 }
 
@@ -346,15 +350,15 @@ process POWER_LMM {
       def iccOpt = params.power_icc != null ? "--icc ${params.power_icc}" : ''
       def visitsOpt = params.power_visits != null ? "--visits ${params.power_visits}" : ''
       def dataOpts = planningMode
-          ? "--n-grid '${nGrid}' ${visitsOpt}"
-          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        --time-col '${params.time_col}' \\\n        ${commonOpts(pheno)}"
+          ? "--n-grid ${q(nGrid)} ${visitsOpt}"
+          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        --time-col ${q(params.time_col)} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_lmm.R \\
         ${dataOpts} \\
         ${iccOpt} \\
         --slope-term ${params.power_slope_term} \\
         ${sharedOpts()} \\
-        --out-prefix ${params.power_prefix}_${pheno}
+        --out-prefix ${q("${params.power_prefix}_${pheno}")}
       """
 }
 
@@ -385,15 +389,15 @@ process POWER_CPH {
 
     script:
       def rateOpt = params.power_event_rate != null ? "--event-rate ${params.power_event_rate}" : ''
-      def evOpt = params.power_event_col ? "--event-col '${params.power_event_col}'" : ''
+      def evOpt = params.power_event_col ? "--event-col ${q(params.power_event_col)}" : ''
       def dataOpts = planningMode
-          ? "--n-grid '${nGrid}' ${rateOpt}"
+          ? "--n-grid ${q(nGrid)} ${rateOpt}"
           : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_cph.R \\
         ${dataOpts} \\
         ${sharedOpts()} \\
-        --out-prefix ${params.power_prefix}_${pheno}
+        --out-prefix ${q("${params.power_prefix}_${pheno}")}
       """
 }
 
