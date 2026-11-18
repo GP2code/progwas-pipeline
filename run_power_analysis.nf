@@ -101,18 +101,49 @@ def parsePhenoNames(value) {
     (value ?: '').split(/[\s,]+/).collect { it.trim() }.findAll { it }
 }
 
+// Cache per (path, delim) so multiple phenotype columns do not re-read the file.
+// Value is Map<String, Integer> of { columnName -> nonBinaryCount }.
+def __nonBinaryCountsCache = [:]
+
 def countNonBinaryValues(path, colName, delim) {
-    def lines = file(path).readLines()
-    if (lines.size() < 2) return 0
-    def header = lines[0].split(delim).collect { it.trim().replaceFirst(/^#/, '') }
-    def idx = header.findIndexOf { it == colName }
-    if (idx < 0) return 0
-    def validValues = ['0', '1', '0.0', '1.0', '', 'NA', 'NaN'] as Set
-    return lines.drop(1).count { line ->
-        if (!line.trim()) return false
-        def fields = line.split(delim, -1)
-        idx < fields.size() && !(fields[idx].trim() in validValues)
+    def cacheKey = "${path}||${delim}"
+    def cached = __nonBinaryCountsCache[cacheKey]
+    if (cached != null) {
+        return (cached[colName] ?: 0) as int
     }
+
+    def validValues = ['0', '1', '0.0', '1.0', '', 'NA', 'NaN'] as Set
+    def countsByCol = [:]
+
+    file(path).withReader { reader ->
+        def headerLine = reader.readLine()
+        if (!headerLine) {
+            __nonBinaryCountsCache[cacheKey] = countsByCol
+            return
+        }
+
+        def header = headerLine.split(delim).collect { it.trim().replaceFirst(/^#/, '') }
+        // Initialize counts to 0 for each column
+        header.each { h -> countsByCol[h] = 0 }
+
+        String line
+        while ((line = reader.readLine()) != null) {
+            if (!line.trim()) continue
+            def fields = line.split(delim, -1)
+
+            // Count non-binary values for all columns in one pass
+            for (int i = 0; i < header.size() && i < fields.size(); i++) {
+                def v = fields[i].trim()
+                if (!(v in validValues)) {
+                    def key = header[i]
+                    countsByCol[key] = (countsByCol[key] as int) + 1
+                }
+            }
+        }
+    }
+
+    __nonBinaryCountsCache[cacheKey] = countsByCol
+    return (countsByCol[colName] ?: 0) as int
 }
 
 /*
