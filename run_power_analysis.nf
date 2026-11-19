@@ -2,6 +2,8 @@
 
 nextflow.enable.dsl = 2
 
+import groovy.transform.Field
+
 /*
  * Study power analysis for proGWAS.
  *
@@ -103,7 +105,7 @@ def parsePhenoNames(value) {
 
 // Cache per (path, delim) so multiple phenotype columns do not re-read the file.
 // Value is Map<String, Integer> of { columnName -> nonBinaryCount }.
-def __nonBinaryCountsCache = [:]
+@Field def __nonBinaryCountsCache = [:]
 
 def countNonBinaryValues(path, colName, delim) {
     def cacheKey = "${path}||${delim}"
@@ -286,7 +288,7 @@ log.info """\
  * design-specific flags; N_info is what actually separates them.
  */
 // Shell-quote a value for the task command, escaping embedded single quotes.
-// Staged path inputs (phenofile, covarfile) are already escaped by Nextflow, so they are not wrapped again.
+// Staged path inputs are passed as q(file.name): Nextflow does not escape paths built inside helpers like covarOpts.
 def q = { v -> "'" + v.toString().replace("'", "'\\''") + "'" }
 
 def commonOpts = { pheno ->
@@ -299,7 +301,7 @@ def commonOpts = { pheno ->
 // used, not the original paths, since the task runs in its own work directory.
 def covarOpts = { covarfile, asetfiles ->
     def names = [asetfiles].flatten().findAll { it }.collect { it.name }
-    names ? "--analysis-set ${q(names.join(','))}" : "--covar-file ${covarfile}"
+    names ? "--analysis-set ${q(names.join(','))}" : "--covar-file ${q(covarfile.name)}"
 }
 
 def sharedOpts = {
@@ -343,7 +345,7 @@ process POWER_GLM {
 
     script:
       def dataOpts = planningMode ? "--n-grid ${q(nGrid)}"
-                                  : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${commonOpts(pheno)}"
+                                  : "--pheno-file ${q(phenofile.name)} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_glm.R \\
         ${dataOpts} \\
@@ -382,7 +384,7 @@ process POWER_LMM {
       def visitsOpt = params.power_visits != null ? "--visits ${params.power_visits}" : ''
       def dataOpts = planningMode
           ? "--n-grid ${q(nGrid)} ${visitsOpt}"
-          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        --time-col ${q(params.time_col)} \\\n        ${commonOpts(pheno)}"
+          : "--pheno-file ${q(phenofile.name)} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        --time-col ${q(params.time_col)} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_lmm.R \\
         ${dataOpts} \\
@@ -423,7 +425,7 @@ process POWER_CPH {
       def evOpt = params.power_event_col ? "--event-col ${q(params.power_event_col)}" : ''
       def dataOpts = planningMode
           ? "--n-grid ${q(nGrid)} ${rateOpt}"
-          : "--pheno-file ${phenofile} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
+          : "--pheno-file ${q(phenofile.name)} \\\n        ${covarOpts(covarfile, analysisset)} \\\n        ${evOpt} \\\n        ${commonOpts(pheno)}"
       """
       power_analysis_cph.R \\
         ${dataOpts} \\
