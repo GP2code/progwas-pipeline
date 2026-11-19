@@ -1,6 +1,6 @@
-# Temporary proGWAS documentation
+# proGWAS extended documentation
 
-Here you will find detailed information on how proGWAS works. Full documentation will be released soon.
+Here you will find detailed information on how proGWAS works.
 
 ## Workflow Overview
 
@@ -356,6 +356,124 @@ nextflow run run_metal.nf -profile gcb_vwb \
 #### Cross-cohort meta-analysis
 
 If you need one METAL run per phenotype across multiple cohorts, set `--metal_pheno_name` as comma-separated values and point `--metal_input` at a glob that spans all cohorts. See `example/params_YML/metal_cross_cohort.yml`.
+
+
+### Power Analysis (run_power_analysis.nf)
+
+Use `run_power_analysis.nf` to compute the minimum detectable effect (MDE) of a GWAS at 80% power. No genotypes, References or plink2 are needed, so it is cheap to run at any stage. Power uses the non-centrality parameter framework (Sham & Purcell 2014) under an additive model: at α = 5×10⁻⁸ and 80% power the required non-centrality parameter is λ = 39.6, and the minimum detectable variance explained is `MDE_R2 = 39.6 / N_info`.
+
+#### Choosing a mode
+
+| Mode | YAML | Reads | Use when |
+|---|---|---|---|
+| Planning | `power_planning.yml` | `power_n_grid` only (hypothetical sample sizes) | Sizing a study that does not exist yet |
+| Before a run | `power_before.yml` | `phenofile` + `covarfile` | Estimating power of an existing cohort before running the GWAS |
+| After a run | `power_after.yml` | `phenofile` + `power_analysis_set` | Reporting power of a completed run (use this for manuscripts) |
+
+`power_n_grid` and `power_analysis_set` are mutually exclusive; setting both is an error.
+
+**Before vs after.** The before mode counts N from the input files, so it includes samples later removed by ancestry, kinship and missingness QC, and it cannot adjust for PCs (they are computed during the run). Its MDEs are therefore optimistic. The after mode reads the post-QC analysis set a run leaves in `<analyses_dir>/<genetic_cache_key>/<analysis_name>/prepared_data/*_filtered.pca.harmonized.tsv`, so N is the analysed sample and the covariates include the PCs.
+
+#### Choosing a design
+
+Set one of `linear_flag`, `longitudinal_flag` or `survival_flag`. Only the effective sample size `N_info` differs between designs:
+
+| Design | `N_info` | Extra settings |
+|---|---|---|
+| GLM (cross-sectional) | N subjects | none |
+| LMM (GALLOP) | `N*k/(1+(k-1)*rho)`, with visits per subject k and ICC rho estimated from the data | `time_col` required; `power_icc` and `power_slope_term` optional |
+| CoxPH | D, the number of observed events (not enrolled subjects) | `pheno_name` must be a 0/1 event column, or set `power_event_col` |
+
+Each design needs its own phenotype file (and, after a run, its own analysis set), so run one design per launch. In planning mode, LMM additionally needs `power_visits` and `power_icc`, and CoxPH can take `power_event_rate` to convert enrolment into events.
+
+The LMM `:slope` row (SNP×time term) reports `N_info = N` as an upper bound, not an exact figure. CoxPH power uses the Schoenfeld events-based approximation rather than the counting-process model that `bin/survival.R` fits for the GWAS itself.
+
+#### Key settings
+
+- `covar_numeric`, `covar_categorical`: list the covariates the GWAS used, including the PCs in after mode. The phenotype SD is the residual SD after these covariates (`power_residualize: true`), which converts the MDE into the phenotype's own units (`MDE_beta_raw`). PCs listed in before mode are dropped, since the raw covariate file has none.
+- `power_info`: imputation r² applied to the genotypic variance. proGWAS strips the INFO column from its pgen output, so this stays an assumption even after a run; state the value you used in your methods.
+- `minor_allele_freq`, `minor_allele_ct`: use the run's QC thresholds, so `Passes_QC` marks which rows of `power_maf_grid` were actually testable.
+- `power_rank_int`: set to `true` if the phenotype was rank-INT transformed before the GWAS; the SD is then 1 and MDEs are already in SD units.
+- `pheno_name`: accepts several space- or comma-separated phenotypes, which run as separate jobs in one launch.
+
+**Power of a meta-analysis.** When the cohorts were run separately and meta-analysed, pass all cohorts' analysis sets as one glob; they are pooled and the `ALL` row gives the meta-analysis power. Each cohort's PCs are on their own axes, so add the cohort column to `covar_categorical` (e.g. `"SEX study"`) and set `power_per_arm: false`, since a single cohort cannot be adjusted for its own cohort label. If `prepared_data/` also holds a pooled `EUR_case_*` file covering the same samples, exclude it from the glob (e.g. `EUR_[A-Z]*`), otherwise samples are read twice.
+
+#### Examples
+
+Parameters given on the command line override the YAML, so one YAML can serve many runs.
+
+**Planning (`power_planning.yml`).** No data files are read, only the hypothetical sample sizes in `power_n_grid`:
+
+```bash
+nextflow run run_power_analysis.nf -profile standard \
+    -params-file ./example/params_YML/power_planning.yml \
+    --power_n_grid "500 1000 2500 5000"
+```
+
+For a longitudinal design, also give the expected visits per subject and ICC:
+
+```bash
+nextflow run run_power_analysis.nf -profile standard \
+    -params-file ./example/params_YML/power_planning.yml \
+    --linear_flag false --longitudinal_flag true \
+    --power_visits 6 --power_icc 0.45
+```
+
+**Before a run (`power_before.yml`).** Takes your own phenotype and covariate files, in the same format `main.nf` expects (see the README for sample identifiers). No proGWAS output is needed, so you can check power before starting the GWAS. On the bundled example data:
+
+```bash
+nextflow run run_power_analysis.nf -profile standard \
+    -params-file ./example/params_YML/power_before.yml
+```
+
+On your own files, pointing the column names at your headers:
+
+```bash
+nextflow run run_power_analysis.nf -profile standard \
+    -params-file ./example/params_YML/power_before.yml \
+    --phenofile /path/to/my_pheno.tsv \
+    --covarfile /path/to/my_covar.tsv \
+    --pheno_name "my_score" \
+    --covar_numeric "age_at_baseline disease_duration" \
+    --covar_categorical "SEX" \
+    --study_arm_col "study" \
+    --power_prefix "MY_SCORE"
+```
+
+**After a run (`power_after.yml`).** Requires the output of a completed proGWAS run: the post-QC analysis set in its `prepared_data/` folder, plus the same phenotype file the run used. Post-QC power of a UPSIT run on Verily Workbench:
+
+```bash
+source ~/.vwb.env
+
+ANALYSIS="UPSIT"
+PHENO="smell_test_score"
+
+cd ~/path/to/progwas-pipeline
+
+nextflow run run_power_analysis.nf -profile gcb_vwb \
+    -params-file ./example/params_YML/power_after.yml \
+    --phenofile "${STORE_ROOT}/${ANALYSIS}/${ANALYSIS}_pheno.tsv" \
+    --power_analysis_set "${STORE_ROOT}/analyses/<genetic_cache_key>/${ANALYSIS}_CS/prepared_data/*_filtered.pca.harmonized.tsv" \
+    --power_outdir "${STORE_ROOT}/power_analysis/post_qc_power" \
+    --pheno_name "${PHENO}" \
+    --power_prefix "${ANALYSIS}"
+```
+
+Keep the `--power_analysis_set` glob quoted so the workflow, not the shell, expands it. For a meta-analysis of separately run cohorts, see the note above on covariates and on excluding pooled files from the glob.
+
+#### Output
+
+Results are written to `<power_outdir>/<design>/<power_prefix>/`, one set per phenotype:
+
+| File | Content |
+|---|---|
+| `<prefix>_<pheno>_power_results.tsv` | One row per group × MAF: `N_info`, `MAC`, `MDE_R2_pct`, `MDE_beta` (SD units), `MDE_beta_raw` (phenotype units), `MDE_HR` (CoxPH), `Passes_QC` |
+| `<prefix>_<pheno>_power_extended_info.tsv` | One row per group: sample counts, `Lambda_req`, `SD_pheno` and `SD_source`, `Info_r2`, ICC (LMM), events and censoring (CoxPH), and the method and citations |
+| `<prefix>_<pheno>_power_curve.png` | `MDE_R2` against `N_info` |
+| `provenance/<prefix>_<pheno>_provenance.txt` | Full invocation, resolved parameters and input files |
+| `power_results_key.tsv`, `extended_info_key.tsv` | Description of every column |
+
+Check `SD_source` after a run: it should list your covariates (`residual SD after ...`). If it reads `marginal SD`, a covariate name did not match.
 
 ## Troubleshooting
 

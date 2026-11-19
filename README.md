@@ -139,7 +139,9 @@ wb nextflow -log LOG_$(date +%Y%m%d_%H%M%S).log run main.nf \
 
 For Batch jobs on a plain (non-VWB) GCP project, you may use `-profile gcb_gcp` instead.
 
-For other example scripts and detailed information on parameter specification and .YML file settings, please consult the `./docs/tmp_docs.md` (work in progress).
+For other example scripts and detailed information on parameter specification and .YML file settings, please consult [`./docs/extended_docs.md`](./docs/extended_docs.md).
+
+**Power calculator.** `run_power_analysis.nf` reports the minimum detectable effect of a GWAS at a given sample size, for planning a study, for an existing cohort, or for a completed run. It needs no genotype files. See the Power Analysis section of [`./docs/extended_docs.md`](./docs/extended_docs.md) and the `power_*.yml` files in `./example/params_YML/`.
 
 ### Sample identifiers in phenotype and covariate files
 
@@ -234,5 +236,5 @@ graph TD
 ## Support
 
 For issues and questions:
-- 🐛 **Bug reports**: [GitHub Issues](https://github.com/GP2code/progwas-pipeline/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/GP2code/progwas-pipeline/discussions)
+- **Bug reports**: [GitHub Issues](https://github.com/GP2code/progwas-pipeline/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/GP2code/progwas-pipeline/discussions)
