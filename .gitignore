@@ -176,3 +176,6 @@ proj*/
 
 # Claude AI worktree
 .claude/
+
+# run_power_analysis.nf default output directory
+power_analysis/
