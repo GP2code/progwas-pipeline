@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+title: "proGWAS: a Nextflow pipeline for cross-sectional, longitudinal and survival GWAS"
+message: "If you use this software, please cite it using the metadata below."
+type: software
+authors:
+  - family-names: "Serrano-Asensio"
+    given-names: "Oiher"
+    orcid: "https://orcid.org/0009-0001-4428-4506"
+  - family-names: "Martinez-Carrasco"
+    given-names: "Alejandro"
+    orcid: "https://orcid.org/0000-0001-6191-1703"
+  - family-names: "Ta"
+    given-names: "Michael"
+    orcid: "https://orcid.org/0000-0001-6148-3841"
+  - family-names: "Kuznetsov"
+    given-names: "Nicole"
+    orcid: "https://orcid.org/0009-0005-9847-0282"
+  - family-names: "Iwaki"
+    given-names: "Hirotaka"
+    orcid: "https://orcid.org/0000-0002-8982-7885"
+  - name: "Global Parkinson's Genetics Program (GP2)"
+    website: "https://gp2.org"
+license: MIT
+repository-code: "https://github.com/GP2code/progwas-pipeline"
+abstract: "A Nextflow-based pipeline to perform genome-wide association studies with cross-sectional (GLM), longitudinal (LMM-GALLOP) and survival (CoxPH) analyses, including genetic QC, sample QC and PCA, association testing, and Manhattan and QQ plots."
+keywords:
+  - GWAS
+  - Nextflow
+  - bioinformatics
+  - genetics
+version: "1.0.0"
+date-released: "2026-11-19"
